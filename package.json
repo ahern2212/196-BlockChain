@@ -1,0 +1,22 @@
+{
+  "name": "simple-message-contract",
+  "version": "1.0.0",
+  "description": "A simple smart contract to store and retrieve messages",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx http-server src"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "smart-contract"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "web3": "^1.5.2"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+} 
