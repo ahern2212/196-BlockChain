@@ -3,51 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Message Contract</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background-color: #f5f5f5;
-            padding: 20px;
-            border-radius: 5px;
-        }
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-    </style>
+    <title>Blockchain Ride Sharing</title>
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Leaflet CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Leaflet Routing Machine for directions -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    
+    <!-- Leaflet Control Geocoder for address search -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>Message Contract</h1>
-        <div>
-            <h2>Current Message:</h2>
-            <p id="currentMessage">Loading...</p>
+        <h1>Blockchain Ride Sharing</h1>
+        
+        <div class="map-container">
+            <div id="map"></div>
         </div>
-        <div>
-            <h2>Set New Message:</h2>
-            <input type="text" id="newMessage" placeholder="Enter new message">
-            <button onclick="setMessage()">Set Message</button>
+        
+        <div class="ride-form">
+            <h2>Request a Ride</h2>
+            <div class="form-group">
+                <label for="pickup">Pickup Location</label>
+                <input type="text" id="pickup" placeholder="Enter pickup location">
+                <button id="use-current-location">Use Current Location</button>
+            </div>
+            <div class="form-group">
+                <label for="destination">Destination</label>
+                <input type="text" id="destination" placeholder="Enter destination">
+            </div>
+            <div class="form-group">
+                <button id="calculate-route">Calculate Route</button>
+                <button id="request-ride">Request Ride</button>
+            </div>
+        </div>
+        
+        <div class="ride-status">
+            <h2>Ride Status</h2>
+            <div id="status-message">No active rides</div>
+            <div id="ride-details"></div>
         </div>
     </div>
+
+    <!-- Web3.js for blockchain interaction -->
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    
     <script src="app.js"></script>
 </body>
 </html> 
