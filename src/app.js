@@ -161,36 +161,43 @@ function initMap() {
 function setupEventListeners() {
     // Use current location button
     document.getElementById("use-current-location").addEventListener("click", function() {
+        console.log("Use current location button clicked");
+        
+        // Show loading indicator
+        document.getElementById("status-message").innerText = "Getting your location...";
+        
+        // Try browser geolocation first
         if (navigator.geolocation) {
+            const timeoutId = setTimeout(function() {
+                // If browser geolocation takes too long, fall back to IP geolocation
+                useIpBasedGeolocation();
+            }, 8000); // Wait 8 seconds before trying IP-based geolocation
+            
             navigator.geolocation.getCurrentPosition(
                 (position) => {
+                    clearTimeout(timeoutId);
                     const pos = {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude,
                     };
                     
-                    // Update the pickup input and coordinates
-                    document.getElementById("pickup").value = "Current Location";
-                    pickupCoords = [pos.lat, pos.lng];
-                    
-                    // Update the map view
-                    map.setView([pos.lat, pos.lng], 15);
-                    
-                    // Add or update the pickup marker
-                    if (pickupMarker) {
-                        pickupMarker.setLatLng([pos.lat, pos.lng]);
-                    } else {
-                        pickupMarker = L.marker([pos.lat, pos.lng]).addTo(map)
-                            .bindPopup('Pickup Location')
-                            .openPopup();
-                    }
+                    // For browser geolocation, we'll do a reverse geocode to get the address
+                    reverseGeocode(pos.lat, pos.lng, function(locationName) {
+                        setPickupLocation(pos.lat, pos.lng, locationName);
+                        document.getElementById("status-message").innerText = "Location set successfully!";
+                    });
                 },
-                () => {
-                    alert("Could not get your location. Please enter it manually.");
-                }
+                (error) => {
+                    clearTimeout(timeoutId);
+                    console.error("Browser geolocation error:", error);
+                    // Fall back to IP-based geolocation
+                    useIpBasedGeolocation();
+                },
+                { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
             );
         } else {
-            alert("Geolocation is not supported by this browser.");
+            // Browser doesn't support geolocation, use IP-based geolocation
+            useIpBasedGeolocation();
         }
     });
     
@@ -400,4 +407,113 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 
 // Make initMap available globally for the callback
-window.initMap = initMap; 
+window.initMap = initMap;
+
+// Function to use IP-based geolocation
+function useIpBasedGeolocation() {
+    document.getElementById("status-message").innerText = "Trying IP-based location...";
+    
+    // Using ipinfo.io API - replace with your actual token
+    fetch('https://ipinfo.io/json?token=7f35172398fbf8')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("IP geolocation data:", data);
+            if (data.loc) {
+                const [lat, lng] = data.loc.split(',').map(coord => parseFloat(coord));
+                
+                // Create location name using city and region
+                let locationName = "Current Location";
+                
+                if (data.city && data.region) {
+                    locationName = `${data.city}, ${data.region}`;
+                } else if (data.city) {
+                    locationName = data.city;
+                } else if (data.region) {
+                    locationName = data.region;
+                }
+                
+                setPickupLocation(lat, lng, locationName);
+                document.getElementById("status-message").innerText = "Location set using IP address.";
+            } else {
+                document.getElementById("status-message").innerText = "Could not determine location from IP.";
+                enableMapClickLocation();
+            }
+        })
+        .catch(error => {
+            console.error("IP geolocation error:", error);
+            document.getElementById("status-message").innerText = "Error getting location from IP.";
+            enableMapClickLocation();
+        });
+}
+
+// Function to set pickup location with improved location display
+function setPickupLocation(lat, lng, locationName = "Selected Location") {
+    // Update the pickup input with the location name
+    document.getElementById("pickup").value = locationName;
+    pickupCoords = [lat, lng];
+    
+    // Update the map view
+    map.setView([lat, lng], 15);
+    
+    // Add or update the pickup marker with the location name
+    if (pickupMarker) {
+        pickupMarker.setLatLng([lat, lng]);
+        pickupMarker.bindPopup(locationName).openPopup();
+    } else {
+        pickupMarker = L.marker([lat, lng]).addTo(map)
+            .bindPopup(locationName)
+            .openPopup();
+    }
+    
+    // If destination is set, calculate the route
+    if (destinationCoords) {
+        calculateRoute();
+    }
+    
+    // Also update any other UI elements that should display the location
+    console.log(`Location set to: ${locationName} (${lat}, ${lng})`);
+}
+
+// Function to do reverse geocoding (get address from coordinates)
+function reverseGeocode(lat, lng, callback) {
+    // Using Nominatim for reverse geocoding (free OpenStreetMap service)
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            console.log("Reverse geocode data:", data);
+            let locationName = "Current Location";
+            
+            if (data && data.display_name) {
+                // Extract a simplified address
+                const parts = data.display_name.split(',');
+                if (parts.length >= 2) {
+                    locationName = `${parts[0].trim()}, ${parts[1].trim()}`;
+                } else {
+                    locationName = data.display_name;
+                }
+            }
+            
+            callback(locationName);
+        })
+        .catch(error => {
+            console.error("Reverse geocoding error:", error);
+            callback("Current Location");
+        });
+}
+
+// Enable map click location
+function enableMapClickLocation() {
+    // Implementation of enableMapClickLocation function
+}
+
+// Add event listener for the switch button
+document.getElementById("switch-to-driver").addEventListener("click", function() {
+    window.location.href = "driver.html";
+}); 

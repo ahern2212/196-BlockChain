@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Dashboard - Blockchain Ridesharing</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+    <header>
+        <h1>Driver Dashboard</h1>
+        <div class="nav-buttons">
+            <button id="switch-to-rider" class="switch-button">Switch to Rider Mode</button>
+            <div class="status-container">
+                <span id="connection-status">Not connected</span>
+                <span id="availability-status" class="status-offline">OFFLINE</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="dashboard-container">
+            <div class="left-panel">
+                <div class="driver-controls">
+                    <h2>Driver Controls</h2>
+                    <div class="toggle-container">
+                        <label for="availability-toggle">Available for Rides:</label>
+                        <label class="switch">
+                            <input type="checkbox" id="availability-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div id="status-message">Connect your wallet to begin</div>
+                </div>
+                
+                <div id="driver-profile" class="panel">
+                    <h2>Driver Profile</h2>
+                    <div id="profile-content">
+                        <p>Name: <span id="driver-name">Not registered</span></p>
+                        <p>Vehicle: <span id="driver-vehicle">Not registered</span></p>
+                        <p>Rating: <span id="driver-rating">N/A</span></p>
+                        <p>Total Earnings: <span id="total-earnings">0 ETH</span></p>
+                    </div>
+                    <button id="register-button">Register as Driver</button>
+                </div>
+                
+                <div id="active-ride" class="panel" style="display: none;">
+                    <h2>Active Ride</h2>
+                    <div class="ride-details">
+                        <p>Pickup: <span id="pickup-location">N/A</span></p>
+                        <p>Destination: <span id="destination-location">N/A</span></p>
+                        <p>Rider: <span id="rider-address">N/A</span></p>
+                        <p>Fare: <span id="ride-fare">0 ETH</span></p>
+                    </div>
+                    <div class="ride-actions">
+                        <button id="arrived-button">Arrived at Pickup</button>
+                        <button id="start-ride-button" disabled>Start Ride</button>
+                        <button id="complete-ride-button" disabled>Complete Ride</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-panel">
+                <div id="driver-map"></div>
+                <div id="ride-requests" class="panel">
+                    <h2>Ride Requests</h2>
+                    <div id="requests-container">
+                        <p class="no-requests">No active requests</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="registration-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <span class="close-button">&times;</span>
+                <h2>Driver Registration</h2>
+                <form id="registration-form">
+                    <div class="form-group">
+                        <label for="driver-name-input">Full Name:</label>
+                        <input type="text" id="driver-name-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="vehicle-info">Vehicle Information:</label>
+                        <input type="text" id="vehicle-info" placeholder="Year, Make, Model, Color" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="license-number">License Number:</label>
+                        <input type="text" id="license-number" required>
+                    </div>
+                    <button type="submit">Register</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="driver.js"></script>
+</body>
+</html>
