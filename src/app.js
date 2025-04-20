@@ -141,20 +141,6 @@ async function setMessage() {
 window.addEventListener('load', async function() {
     console.log('App initialization started');
     try {
-        // Wait for Google Maps to load
-        if (!window.google || !window.google.maps) {
-            console.log('Waiting for Google Maps to load...');
-            await new Promise(resolve => {
-                const checkGoogleMaps = setInterval(() => {
-                    if (window.google && window.google.maps) {
-                        clearInterval(checkGoogleMaps);
-                        resolve();
-                    }
-                }, 100);
-            });
-            console.log('Google Maps loaded');
-        }
-
         await initWeb3();
         await initMap();
         setupEventListeners();
@@ -169,42 +155,59 @@ window.addEventListener('load', async function() {
 function initMap() {
     console.log('Initializing map...');
     return new Promise((resolve) => {
-        // Create map centered on a default location (San Francisco)
-        map = L.map('map').setView([37.7749, -122.4194], 13);
-        console.log('Map created');
-        
-        // Add the OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
-        console.log('Map tiles added');
-        
-        // Try to get user's current location and center map there
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const pos = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    console.log('Got user location:', pos);
-                    map.setView([pos.lat, pos.lng], 15);
-                    resolve();
-                },
-                (error) => {
-                    console.error("Geolocation error:", error);
-                    console.log("Using default location");
-                    resolve();
-                }
-            );
-        } else {
-            console.log('Geolocation not available');
+        try {
+            // Create map centered on a default location (San Francisco)
+            map = L.map('map').setView([37.7749, -122.4194], 13);
+            console.log('Map created');
+            
+            // Add the OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            console.log('Map tiles added');
+
+            // Add the geocoder control
+            const geocoder = L.Control.geocoder({
+                defaultMarkGeocode: false
+            })
+            .on('markgeocode', function(e) {
+                const { center, name } = e.geocode;
+                map.setView(center, 15);
+            })
+            .addTo(map);
+            
+            // Try to get user's current location and center map there
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const pos = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        console.log('Got user location:', pos);
+                        map.setView([pos.lat, pos.lng], 15);
+                        resolve();
+                    },
+                    (error) => {
+                        console.error("Geolocation error:", error);
+                        console.log("Using default location");
+                        resolve();
+                    }
+                );
+            } else {
+                console.log('Geolocation not available');
+                resolve();
+            }
+
+            // Add click handler to map
+            map.on('click', handleMapClick);
+            console.log('Map click handler added');
+        } catch (error) {
+            console.error('Error initializing map:', error);
+            showToast('Error initializing map. Please refresh the page.', 'error');
             resolve();
         }
-
-        // Add click handler to map
-        map.on('click', handleMapClick);
-        console.log('Map click handler added');
     });
 }
 
@@ -530,27 +533,218 @@ function calculateRoute() {
     });
 }
 
-// Initialize Web3
-async function initWeb3() {
-    if (window.ethereum) {
-        try {
-            // Request account access
-            await window.ethereum.request({ method: 'eth_requestAccounts' });
-            web3 = new Web3(window.ethereum);
-        } catch (error) {
-            console.error("User denied account access");
-        }
-    } else if (window.web3) {
-        web3 = new Web3(window.web3.currentProvider);
+// Function to check if MetaMask is installed
+async function checkMetaMaskInstalled() {
+    const connectWalletBtn = document.getElementById('connect-wallet');
+    const statusMessage = document.getElementById('status-message');
+    const rideDetails = document.getElementById('ride-details');
+    
+    // Check for MetaMask in multiple ways
+    const isMetaMaskInstalled = () => {
+        return Boolean(window.ethereum && window.ethereum.isMetaMask);
+    };
+
+    if (isMetaMaskInstalled()) {
+        // MetaMask is installed
+        connectWalletBtn.innerHTML = `
+            <i class="fas fa-wallet"></i>
+            <span>Connect Wallet</span>
+        `;
+        connectWalletBtn.onclick = async () => {
+            try {
+                console.log('Requesting account access...');
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                if (accounts.length > 0) {
+                    console.log('Connected account:', accounts[0]);
+                    updateConnectionStatus(true, accounts[0]);
+                    
+                    // Initialize the contract after connection
+                    try {
+                        rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
+                        console.log('Contract initialized');
+                        statusMessage.innerHTML = 'Ready to request a ride';
+                        rideDetails.innerHTML = '';
+                    } catch (error) {
+                        console.error('Error initializing contract:', error);
+                        showToast('Error initializing smart contract', 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Error connecting to MetaMask:', error);
+                if (error.code === 4001) {
+                    // User rejected the connection request
+                    showToast('Please accept the connection request in MetaMask', 'error');
+                } else {
+                    showToast('Error connecting to MetaMask. Please try refreshing the page.', 'error');
+                }
+            }
+        };
+        return true;
     } else {
-        // If no injected web3 instance is detected, fall back to Ganache
-        web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:7545"));
+        // Check if we're in a browser that should support MetaMask
+        const isCompatibleBrowser = () => {
+            const userAgent = window.navigator.userAgent.toLowerCase();
+            return (
+                userAgent.includes('chrome') || 
+                userAgent.includes('firefox') || 
+                userAgent.includes('edge') ||
+                userAgent.includes('opera')
+            );
+        };
+
+        if (isCompatibleBrowser()) {
+            // Browser is compatible but MetaMask not found
+            statusMessage.innerHTML = `
+                <div class="metamask-notice">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p><strong>MetaMask Not Detected</strong></p>
+                    <p>We can see you're using a compatible browser, but MetaMask isn't detected. This could mean:</p>
+                    <ul>
+                        <li>MetaMask is installed but not enabled</li>
+                        <li>You need to refresh the page</li>
+                        <li>MetaMask needs to be installed</li>
+                    </ul>
+                    <p>Please try:</p>
+                    <ol>
+                        <li>Checking if MetaMask is enabled in your browser extensions</li>
+                        <li>Refreshing this page</li>
+                        <li>Installing MetaMask if you haven't already</li>
+                    </ol>
+                </div>
+            `;
+            
+            connectWalletBtn.innerHTML = `
+                <i class="fas fa-sync-alt"></i>
+                <span>Refresh Page</span>
+            `;
+            connectWalletBtn.onclick = () => {
+                window.location.reload();
+            };
+        } else {
+            // Browser is not compatible
+            statusMessage.innerHTML = `
+                <div class="metamask-notice">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p><strong>Compatible Browser Required</strong></p>
+                    <p>Please use Chrome, Firefox, Edge, or Opera to access this application with MetaMask.</p>
+                </div>
+            `;
+            
+            connectWalletBtn.innerHTML = `
+                <i class="fas fa-download"></i>
+                <span>Install MetaMask</span>
+            `;
+            connectWalletBtn.onclick = () => {
+                window.open('https://metamask.io/download/', '_blank');
+            };
+        }
+        rideDetails.innerHTML = '';
+        return false;
     }
+}
+
+// Initialize Web3 and MetaMask connection
+async function initWeb3() {
+    console.log('Initializing Web3...');
     
-    // Initialize the contract
-    rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
+    // Check if MetaMask is installed
+    const isMetaMaskInstalled = await checkMetaMaskInstalled();
     
-    console.log("Web3 initialized");
+    if (isMetaMaskInstalled) {
+        try {
+            // Initialize Web3
+            web3 = new Web3(window.ethereum);
+            console.log('Web3 initialized with MetaMask');
+            
+            // Check if already connected
+            const accounts = await web3.eth.getAccounts();
+            if (accounts.length > 0) {
+                console.log('Already connected account:', accounts[0]);
+                updateConnectionStatus(true, accounts[0]);
+            }
+
+            // Listen for account changes
+            window.ethereum.on('accountsChanged', function (accounts) {
+                console.log('Account changed:', accounts[0]);
+                if (accounts.length > 0) {
+                    updateConnectionStatus(true, accounts[0]);
+                } else {
+                    updateConnectionStatus(false);
+                    showToast('Please connect your wallet', 'info');
+                }
+            });
+
+            // Listen for network changes
+            window.ethereum.on('chainChanged', function(networkId) {
+                console.log('Network changed:', networkId);
+                showToast('Network changed. Reloading...', 'info');
+                window.location.reload();
+            });
+
+            // Listen for MetaMask disconnect
+            window.ethereum.on('disconnect', function() {
+                console.log('MetaMask disconnected');
+                updateConnectionStatus(false);
+                showToast('Wallet disconnected', 'info');
+            });
+
+        } catch (error) {
+            console.error('Error initializing Web3:', error);
+            showToast('Error connecting to blockchain network', 'error');
+        }
+    } else {
+        console.error('MetaMask not detected');
+        showToast('Please install MetaMask to use this application', 'error');
+    }
+}
+
+// Function to update connection status UI
+function updateConnectionStatus(isConnected, account = null) {
+    const connectWalletBtn = document.getElementById('connect-wallet');
+    const connectionStatus = document.getElementById('connection-status');
+    const statusIcon = connectionStatus.querySelector('i');
+    const statusText = connectionStatus.querySelector('span');
+
+    if (isConnected && account) {
+        // Update button
+        connectWalletBtn.innerHTML = `
+            <i class="fas fa-wallet"></i>
+            <span>${account.substring(0, 6)}...${account.substring(38)}</span>
+        `;
+        connectWalletBtn.style.backgroundColor = '#27ae60';
+
+        // Update status
+        connectionStatus.classList.add('connected');
+        statusIcon.style.color = '#2ecc71';
+        statusText.textContent = 'Connected';
+
+        // Enable ride request functionality
+        const requestRideBtn = document.getElementById('request-ride');
+        if (requestRideBtn) {
+            requestRideBtn.disabled = false;
+        }
+    } else {
+        // Reset button
+        connectWalletBtn.innerHTML = `
+            <i class="fas fa-wallet"></i>
+            <span>Connect Wallet</span>
+        `;
+        connectWalletBtn.style.backgroundColor = '#2ecc71';
+
+        // Reset status
+        connectionStatus.classList.remove('connected');
+        statusIcon.style.color = '#e74c3c';
+        statusText.textContent = 'Not connected';
+
+        // Disable ride request functionality
+        const requestRideBtn = document.getElementById('request-ride');
+        if (requestRideBtn) {
+            requestRideBtn.disabled = true;
+        }
+    }
 }
 
 // Request a ride
@@ -604,72 +798,51 @@ async function requestRide() {
 
 // Function to search for a location
 function searchLocation(searchQuery, type) {
-    console.log('=== Search Process Started ===');
+    console.log(`=== Search Process Started ===`);
     console.log(`Searching for: "${searchQuery}" (type: ${type})`);
+
+    // Use Nominatim for geocoding
+    const searchUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`;
     
-    // Show loading indicator
-    const searchButton = document.querySelector(`#${type}-search`);
-    const icon = searchButton?.querySelector('i');
-    if (icon) {
-        icon.className = 'fas fa-spinner fa-spin';
-    }
-    
-    showToast(`Searching for ${searchQuery}...`, 'info');
+    fetch(searchUrl)
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.length > 0) {
+                const location = data[0];
+                const lat = parseFloat(location.lat);
+                const lng = parseFloat(location.lon);
+                const displayName = location.display_name;
+                
+                console.log('Location found:', {
+                    lat: lat,
+                    lng: lng,
+                    name: displayName
+                });
 
-    // Clean up the search query
-    const cleanQuery = searchQuery.toLowerCase().trim()
-        .replace(/,?\s*ca(lifornia)?$/i, '') // Remove CA or California from the end
-        .replace(/[^a-z\s]/g, '') // Remove any special characters
-        .trim();
+                if (type === 'pickup') {
+                    setPickupLocation(lat, lng, displayName);
+                    document.getElementById('pickup').value = displayName;
+                } else {
+                    setDestinationLocation(lat, lng, displayName);
+                    document.getElementById('destination').value = displayName;
+                }
 
-    // Try to find the city in our database
-    let found = false;
-    for (const [city, data] of Object.entries(caCities)) {
-        if (cleanQuery === city || city.includes(cleanQuery) || cleanQuery.includes(city)) {
-            found = true;
-            
-            // Reset icon
-            if (icon) {
-                icon.className = 'fas fa-search';
-            }
-
-            console.log('Location found:', data);
-
-            // Update status message
-            document.getElementById("status-message").innerText = `Found: ${data.name}`;
-
-            // Update map
-            map.flyTo([data.lat, data.lng], 13, {
-                duration: 1.5,
-                easeLinearity: 0.25
-            });
-
-            // Set location
-            if (type === 'pickup') {
-                setPickupLocation(data.lat, data.lng, data.name);
-                showToast('Pickup location set successfully');
+                // Center map on the found location
+                map.setView([lat, lng], 15);
+                
+                // If both locations are set, calculate the route
+                if (pickupCoords && destinationCoords) {
+                    calculateRoute();
+                }
             } else {
-                setDestinationLocation(data.lat, data.lng, data.name);
-                showToast('Destination location set successfully');
+                console.log(`Location not found: ${searchQuery}`);
+                showToast(`Could not find "${searchQuery}". Please try a different address.`, 'error');
             }
-
-            // Calculate route if both locations are set
-            if (pickupCoords && destinationCoords) {
-                calculateRoute();
-            }
-            break;
-        }
-    }
-
-    if (!found) {
-        // Reset icon
-        if (icon) {
-            icon.className = 'fas fa-search';
-        }
-        
-        console.log('Location not found:', cleanQuery);
-        showToast(`Could not find "${searchQuery}". Available cities include: Dixon, Fairfield, Vacaville, Davis, Sacramento, etc.`, 'error');
-    }
+        })
+        .catch(error => {
+            console.error('Error searching location:', error);
+            showToast('Error searching for location. Please try again.', 'error');
+        });
 }
 
 // Make initMap available globally for the callback
