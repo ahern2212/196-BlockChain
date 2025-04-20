@@ -6,12 +6,42 @@ const contractAddress = '0x1234567890123456789012345678901234567890'; // Replace
 // Global variables
 let map;
 let routingControl;
-let pickupMarker;
-let destinationMarker;
+let pickupMarker = null;
+let destinationMarker = null;
 let currentRideId;
 let rideSharingContract;
-let pickupCoords;
-let destinationCoords;
+let pickupCoords = null;
+let destinationCoords = null;
+
+// California cities database
+const caCities = {
+    "dixon": { lat: 38.4455, lng: -121.8233, name: "Dixon, CA" },
+    "fairfield": { lat: 38.2494, lng: -122.0401, name: "Fairfield, CA" },
+    "vacaville": { lat: 38.3565, lng: -121.9877, name: "Vacaville, CA" },
+    "davis": { lat: 38.5449, lng: -121.7405, name: "Davis, CA" },
+    "sacramento": { lat: 38.5816, lng: -121.4944, name: "Sacramento, CA" },
+    "san francisco": { lat: 37.7749, lng: -122.4194, name: "San Francisco, CA" },
+    "berkeley": { lat: 37.8715, lng: -122.2730, name: "Berkeley, CA" },
+    "oakland": { lat: 37.8044, lng: -122.2712, name: "Oakland, CA" },
+    "san jose": { lat: 37.3382, lng: -121.8863, name: "San Jose, CA" },
+    "palo alto": { lat: 37.4419, lng: -122.1430, name: "Palo Alto, CA" },
+    "napa": { lat: 38.2975, lng: -122.2869, name: "Napa, CA" },
+    "vallejo": { lat: 38.1041, lng: -122.2566, name: "Vallejo, CA" },
+    "santa rosa": { lat: 38.4404, lng: -122.7141, name: "Santa Rosa, CA" },
+    "richmond": { lat: 37.9358, lng: -122.3478, name: "Richmond, CA" },
+    "concord": { lat: 37.9722, lng: -122.0016, name: "Concord, CA" }
+};
+
+// Check if Leaflet Control Geocoder is loaded
+window.addEventListener('load', function() {
+    console.log('Checking Leaflet Control Geocoder...');
+    if (!L.Control.Geocoder) {
+        console.error('Leaflet Control Geocoder not loaded!');
+        showToast('Error: Map search functionality not available. Please refresh the page.', 'error');
+    } else {
+        console.log('Leaflet Control Geocoder loaded successfully');
+    }
+});
 
 // Contract ABI and address - you'll need to replace these with your actual contract details
 const contractABI = [/* Your contract ABI here */];
@@ -108,30 +138,235 @@ async function setMessage() {
 }
 
 // Initialize the app
-window.addEventListener('load', init);
+window.addEventListener('load', async function() {
+    console.log('App initialization started');
+    try {
+        // Wait for Google Maps to load
+        if (!window.google || !window.google.maps) {
+            console.log('Waiting for Google Maps to load...');
+            await new Promise(resolve => {
+                const checkGoogleMaps = setInterval(() => {
+                    if (window.google && window.google.maps) {
+                        clearInterval(checkGoogleMaps);
+                        resolve();
+                    }
+                }, 100);
+            });
+            console.log('Google Maps loaded');
+        }
+
+        await initWeb3();
+        await initMap();
+        setupEventListeners();
+        console.log('App initialization completed');
+    } catch (error) {
+        console.error('Error during app initialization:', error);
+        showToast('Error initializing the application. Please refresh the page.', 'error');
+    }
+});
 
 // Initialize Leaflet map
 function initMap() {
-    // Create map centered on a default location (San Francisco)
-    map = L.map('map').setView([37.7749, -122.4194], 13);
-    
-    // Add the OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
-    
-    // Add geocoder control for searching addresses
-    const geocoder = L.Control.geocoder({
-        defaultMarkGeocode: false
-    }).addTo(map);
-    
-    // Handle geocoding results
-    geocoder.on('markgeocode', function(e) {
-        const result = e.geocode;
-        map.setView(result.center, 13);
+    console.log('Initializing map...');
+    return new Promise((resolve) => {
+        // Create map centered on a default location (San Francisco)
+        map = L.map('map').setView([37.7749, -122.4194], 13);
+        console.log('Map created');
+        
+        // Add the OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        console.log('Map tiles added');
+        
+        // Try to get user's current location and center map there
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const pos = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    console.log('Got user location:', pos);
+                    map.setView([pos.lat, pos.lng], 15);
+                    resolve();
+                },
+                (error) => {
+                    console.error("Geolocation error:", error);
+                    console.log("Using default location");
+                    resolve();
+                }
+            );
+        } else {
+            console.log('Geolocation not available');
+            resolve();
+        }
+
+        // Add click handler to map
+        map.on('click', handleMapClick);
+        console.log('Map click handler added');
     });
+}
+
+// Handle map clicks
+function handleMapClick(e) {
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
     
-    // Try to get user's current location
+    // Get the address for the clicked location
+    const geocoder = L.Control.Geocoder.nominatim();
+    geocoder.reverse(e.latlng, map.options.crs.scale(map.getZoom()), function(results) {
+        const address = results && results.length > 0 ? results[0].name : `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        
+        if (!pickupCoords) {
+            // Set pickup location
+            setPickupLocation(lat, lng, address);
+            showToast('Pickup location set to: ' + address);
+        } else if (!destinationCoords) {
+            // Set destination location
+            setDestinationLocation(lat, lng, address);
+            showToast('Destination location set to: ' + address);
+            // Calculate route automatically when both locations are set
+            calculateRoute();
+        }
+    });
+}
+
+// Set up event listeners
+function setupEventListeners() {
+    console.log('Setting up event listeners...');
+    
+    // Use current location button
+    const currentLocationBtn = document.getElementById("use-current-location");
+    if (currentLocationBtn) {
+        currentLocationBtn.addEventListener("click", function() {
+            console.log('Current location button clicked');
+            showToast('Getting your location...', 'info');
+            getCurrentLocation();
+        });
+        console.log('Current location button listener added');
+    }
+
+    // Input field handlers for search
+    const pickupInput = document.getElementById("pickup");
+    if (pickupInput) {
+        pickupInput.addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                console.log('Pickup input enter pressed');
+                e.preventDefault(); // Prevent form submission
+                const location = this.value.trim();
+                if (location) {
+                    searchLocation(location, 'pickup');
+                }
+            }
+        });
+        console.log('Pickup input listener added');
+    }
+
+    const destinationInput = document.getElementById("destination");
+    if (destinationInput) {
+        destinationInput.addEventListener("keypress", function(e) {
+            if (e.key === "Enter") {
+                console.log('Destination input enter pressed');
+                e.preventDefault(); // Prevent form submission
+                const location = this.value.trim();
+                if (location) {
+                    searchLocation(location, 'destination');
+                }
+            }
+        });
+        console.log('Destination input listener added');
+    }
+    
+    // Search button handler for pickup
+    const pickupSearchBtn = document.getElementById("pickup-search");
+    if (pickupSearchBtn) {
+        pickupSearchBtn.addEventListener("click", function() {
+            console.log('Pickup search button clicked');
+            const location = document.getElementById("pickup").value.trim();
+            if (location) {
+                searchLocation(location, 'pickup');
+            } else {
+                showToast('Please enter a pickup location', 'error');
+            }
+        });
+        console.log('Pickup search button listener added');
+    }
+
+    // Search button handler for destination
+    const destSearchBtn = document.getElementById("destination-search");
+    if (destSearchBtn) {
+        destSearchBtn.addEventListener("click", function() {
+            console.log('Destination search button clicked');
+            const location = document.getElementById("destination").value.trim();
+            if (location) {
+                searchLocation(location, 'destination');
+            } else {
+                showToast('Please enter a destination location', 'error');
+            }
+        });
+        console.log('Destination search button listener added');
+    }
+    
+    // Calculate route button
+    const calculateRouteBtn = document.getElementById("calculate-route");
+    if (calculateRouteBtn) {
+        calculateRouteBtn.addEventListener("click", function() {
+            console.log('Calculate route button clicked');
+            if (!pickupCoords || !destinationCoords) {
+                showToast('Please set both pickup and destination locations', 'error');
+                return;
+            }
+            calculateRoute();
+        });
+        console.log('Calculate route button listener added');
+    }
+    
+    // Request ride button
+    const requestRideBtn = document.getElementById("request-ride");
+    if (requestRideBtn) {
+        requestRideBtn.addEventListener("click", function() {
+            console.log('Request ride button clicked');
+            if (!pickupCoords || !destinationCoords) {
+                showToast('Please set both locations first', 'error');
+                return;
+            }
+            if (!routingControl) {
+                showToast('Please calculate the route first', 'error');
+                return;
+            }
+            requestRide();
+        });
+        console.log('Request ride button listener added');
+    }
+
+    console.log('All event listeners set up successfully');
+}
+
+// Function to show toast messages
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <i class="fas ${type === 'error' ? 'fa-exclamation-circle' : 
+                       type === 'info' ? 'fa-info-circle' : 
+                       'fa-check-circle'}"></i>
+        ${message}
+    `;
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => toast.classList.add('show'), 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Get current location with better error handling
+function getCurrentLocation() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -139,140 +374,111 @@ function initMap() {
                     lat: position.coords.latitude,
                     lng: position.coords.longitude,
                 };
-                map.setView([pos.lat, pos.lng], 15);
                 
-                // Create a marker for the current location
-                L.marker([pos.lat, pos.lng]).addTo(map)
-                    .bindPopup('Your Current Location')
-                    .openPopup();
-                
-                // Set the pickup location to current location
-                document.getElementById("pickup").value = "Current Location";
-                pickupCoords = [pos.lat, pos.lng];
+                reverseGeocode(pos.lat, pos.lng, function(locationName) {
+                    setPickupLocation(pos.lat, pos.lng, locationName);
+                    showToast('Current location set as pickup');
+                });
             },
-            () => {
-                console.log("Error: The Geolocation service failed.");
+            (error) => {
+                let errorMessage = 'Could not get your location';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage = 'Please allow location access to use this feature';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage = 'Location information unavailable';
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage = 'Location request timed out';
+                        break;
+                }
+                showToast(errorMessage, 'error');
+                useIpBasedGeolocation();
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 300000
             }
         );
+    } else {
+        showToast('Geolocation is not supported by your browser', 'error');
+        useIpBasedGeolocation();
     }
 }
 
-// Set up event listeners
-function setupEventListeners() {
-    // Use current location button
-    document.getElementById("use-current-location").addEventListener("click", function() {
-        console.log("Use current location button clicked");
-        
-        // Show loading indicator
-        document.getElementById("status-message").innerText = "Getting your location...";
-        
-        // Try browser geolocation first
-        if (navigator.geolocation) {
-            const timeoutId = setTimeout(function() {
-                // If browser geolocation takes too long, fall back to IP geolocation
-                useIpBasedGeolocation();
-            }, 8000); // Wait 8 seconds before trying IP-based geolocation
-            
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    clearTimeout(timeoutId);
-                    const pos = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                    };
-                    
-                    // For browser geolocation, we'll do a reverse geocode to get the address
-                    reverseGeocode(pos.lat, pos.lng, function(locationName) {
-                        setPickupLocation(pos.lat, pos.lng, locationName);
-                        document.getElementById("status-message").innerText = "Location set successfully!";
-                    });
-                },
-                (error) => {
-                    clearTimeout(timeoutId);
-                    console.error("Browser geolocation error:", error);
-                    // Fall back to IP-based geolocation
-                    useIpBasedGeolocation();
-                },
-                { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
-            );
-        } else {
-            // Browser doesn't support geolocation, use IP-based geolocation
-            useIpBasedGeolocation();
-        }
-    });
+// Function to set pickup location
+function setPickupLocation(lat, lng, address) {
+    // Update the input field with the address
+    document.getElementById("pickup").value = address;
     
-    // Calculate route button
-    document.getElementById("calculate-route").addEventListener("click", calculateRoute);
+    // Store the coordinates
+    pickupCoords = [lat, lng];
     
-    // Request ride button
-    document.getElementById("request-ride").addEventListener("click", requestRide);
+    // Remove existing pickup marker if it exists
+    if (pickupMarker) {
+        map.removeLayer(pickupMarker);
+    }
     
-    // Pickup and destination input geocoding
-    document.getElementById("pickup").addEventListener("change", geocodePickup);
-    document.getElementById("destination").addEventListener("change", geocodeDestination);
+    // Create new pickup marker with a fallback icon
+    try {
+        pickupMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'custom-marker pickup-marker',
+                html: '<i class="fas fa-map-marker-alt"></i>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 30]
+            })
+        }).addTo(map);
+    } catch (error) {
+        console.error('Error creating custom marker, using default:', error);
+        pickupMarker = L.marker([lat, lng]).addTo(map);
+    }
+    
+    // Bind popup to marker
+    pickupMarker.bindPopup('Pickup: ' + address).openPopup();
+    
+    // Update status message
+    document.getElementById("status-message").innerHTML = 
+        `<i class="fas fa-map-marker-alt"></i> Pickup set to: ${address}` +
+        (!destinationCoords ? '<br>Now click on the map to set destination' : '');
 }
 
-// Geocode the pickup location
-function geocodePickup() {
-    const pickupAddress = document.getElementById("pickup").value;
-    if (pickupAddress && pickupAddress !== "Current Location") {
-        const geocoder = L.Control.Geocoder.nominatim();
-        geocoder.geocode(pickupAddress, function(results) {
-            if (results && results.length > 0) {
-                const result = results[0];
-                pickupCoords = [result.center.lat, result.center.lng];
-                
-                // Add or update the pickup marker
-                if (pickupMarker) {
-                    pickupMarker.setLatLng(pickupCoords);
-                } else {
-                    pickupMarker = L.marker(pickupCoords).addTo(map)
-                        .bindPopup('Pickup Location')
-                        .openPopup();
-                }
-                
-                // Update the map view
-                map.setView(pickupCoords, 15);
-                
-                // If destination is also set, calculate the route
-                if (destinationCoords) {
-                    calculateRoute();
-                }
-            } else {
-                alert("Could not find the pickup location. Please try a different address.");
-            }
-        });
+// Function to set destination location
+function setDestinationLocation(lat, lng, address) {
+    // Update the input field with the address
+    document.getElementById("destination").value = address;
+    
+    // Store the coordinates
+    destinationCoords = [lat, lng];
+    
+    // Remove existing destination marker if it exists
+    if (destinationMarker) {
+        map.removeLayer(destinationMarker);
     }
-}
-
-// Geocode the destination location
-function geocodeDestination() {
-    const destinationAddress = document.getElementById("destination").value;
-    if (destinationAddress) {
-        const geocoder = L.Control.Geocoder.nominatim();
-        geocoder.geocode(destinationAddress, function(results) {
-            if (results && results.length > 0) {
-                const result = results[0];
-                destinationCoords = [result.center.lat, result.center.lng];
-                
-                // Add or update the destination marker
-                if (destinationMarker) {
-                    destinationMarker.setLatLng(destinationCoords);
-                } else {
-                    destinationMarker = L.marker(destinationCoords).addTo(map)
-                        .bindPopup('Destination')
-                        .openPopup();
-                }
-                
-                // If pickup is also set, calculate the route
-                if (pickupCoords) {
-                    calculateRoute();
-                }
-            } else {
-                alert("Could not find the destination. Please try a different address.");
-            }
-        });
+    
+    // Create new destination marker with a fallback icon
+    try {
+        destinationMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'custom-marker destination-marker',
+                html: '<i class="fas fa-flag-checkered"></i>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 30]
+            })
+        }).addTo(map);
+    } catch (error) {
+        console.error('Error creating custom marker, using default:', error);
+        destinationMarker = L.marker([lat, lng]).addTo(map);
     }
+    
+    // Bind popup to marker
+    destinationMarker.bindPopup('Destination: ' + address).openPopup();
+    
+    // Update status message
+    document.getElementById("status-message").innerHTML = 
+        `<i class="fas fa-flag-checkered"></i> Destination set to: ${address}`;
 }
 
 // Calculate and display route
@@ -396,15 +602,75 @@ async function requestRide() {
     }
 }
 
-// Add event listeners after DOM is loaded
-document.addEventListener("DOMContentLoaded", function() {
-    // Add event listeners for the pickup and destination fields
-    document.getElementById("pickup").addEventListener("change", calculateRoute);
-    document.getElementById("destination").addEventListener("change", calculateRoute);
-    initMap();
-    setupEventListeners();
-    initWeb3();
-});
+// Function to search for a location
+function searchLocation(searchQuery, type) {
+    console.log('=== Search Process Started ===');
+    console.log(`Searching for: "${searchQuery}" (type: ${type})`);
+    
+    // Show loading indicator
+    const searchButton = document.querySelector(`#${type}-search`);
+    const icon = searchButton?.querySelector('i');
+    if (icon) {
+        icon.className = 'fas fa-spinner fa-spin';
+    }
+    
+    showToast(`Searching for ${searchQuery}...`, 'info');
+
+    // Clean up the search query
+    const cleanQuery = searchQuery.toLowerCase().trim()
+        .replace(/,?\s*ca(lifornia)?$/i, '') // Remove CA or California from the end
+        .replace(/[^a-z\s]/g, '') // Remove any special characters
+        .trim();
+
+    // Try to find the city in our database
+    let found = false;
+    for (const [city, data] of Object.entries(caCities)) {
+        if (cleanQuery === city || city.includes(cleanQuery) || cleanQuery.includes(city)) {
+            found = true;
+            
+            // Reset icon
+            if (icon) {
+                icon.className = 'fas fa-search';
+            }
+
+            console.log('Location found:', data);
+
+            // Update status message
+            document.getElementById("status-message").innerText = `Found: ${data.name}`;
+
+            // Update map
+            map.flyTo([data.lat, data.lng], 13, {
+                duration: 1.5,
+                easeLinearity: 0.25
+            });
+
+            // Set location
+            if (type === 'pickup') {
+                setPickupLocation(data.lat, data.lng, data.name);
+                showToast('Pickup location set successfully');
+            } else {
+                setDestinationLocation(data.lat, data.lng, data.name);
+                showToast('Destination location set successfully');
+            }
+
+            // Calculate route if both locations are set
+            if (pickupCoords && destinationCoords) {
+                calculateRoute();
+            }
+            break;
+        }
+    }
+
+    if (!found) {
+        // Reset icon
+        if (icon) {
+            icon.className = 'fas fa-search';
+        }
+        
+        console.log('Location not found:', cleanQuery);
+        showToast(`Could not find "${searchQuery}". Available cities include: Dixon, Fairfield, Vacaville, Davis, Sacramento, etc.`, 'error');
+    }
+}
 
 // Make initMap available globally for the callback
 window.initMap = initMap;
@@ -451,34 +717,6 @@ function useIpBasedGeolocation() {
         });
 }
 
-// Function to set pickup location with improved location display
-function setPickupLocation(lat, lng, locationName = "Selected Location") {
-    // Update the pickup input with the location name
-    document.getElementById("pickup").value = locationName;
-    pickupCoords = [lat, lng];
-    
-    // Update the map view
-    map.setView([lat, lng], 15);
-    
-    // Add or update the pickup marker with the location name
-    if (pickupMarker) {
-        pickupMarker.setLatLng([lat, lng]);
-        pickupMarker.bindPopup(locationName).openPopup();
-    } else {
-        pickupMarker = L.marker([lat, lng]).addTo(map)
-            .bindPopup(locationName)
-            .openPopup();
-    }
-    
-    // If destination is set, calculate the route
-    if (destinationCoords) {
-        calculateRoute();
-    }
-    
-    // Also update any other UI elements that should display the location
-    console.log(`Location set to: ${locationName} (${lat}, ${lng})`);
-}
-
 // Function to do reverse geocoding (get address from coordinates)
 function reverseGeocode(lat, lng, callback) {
     // Using Nominatim for reverse geocoding (free OpenStreetMap service)
@@ -510,7 +748,12 @@ function reverseGeocode(lat, lng, callback) {
 
 // Enable map click location
 function enableMapClickLocation() {
-    // Implementation of enableMapClickLocation function
+    if (map) {
+        showToast('Click on the map to set your location', 'info');
+        document.getElementById("status-message").innerText = "Click on the map to set your location";
+    } else {
+        showToast('Map not initialized properly', 'error');
+    }
 }
 
 // Add event listener for the switch button

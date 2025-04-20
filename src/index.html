@@ -3,64 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blockchain Ride Sharing</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; script-src 'self' https: 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://*.openstreetmap.org; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https: http:; connect-src 'self' https: http: *.openstreetmap.org nominatim.openstreetmap.org;">
+    <title>Blockchain Ridesharing</title>
     
     <!-- Leaflet CSS and JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     
     <!-- Leaflet Routing Machine for directions -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js" crossorigin=""></script>
     
     <!-- Leaflet Control Geocoder for address search -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
-    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js" crossorigin=""></script>
+    
+    <!-- Google Maps JavaScript API (Geocoding only) -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA7B46osUBL2pFCUkEFMxXZYcBfy0ieVOw" async defer></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" crossorigin=""/>
+    
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header>
         <h1>Blockchain Ridesharing</h1>
         <div class="nav-buttons">
-            <button id="switch-to-driver" class="switch-button">Switch to Driver Mode</button>
-            <span id="connection-status">Not connected</span>
+            <button id="switch-to-driver" class="switch-button">
+                <i class="fas fa-car"></i> Switch to Driver Mode
+            </button>
+            <span id="connection-status" class="connection-status">
+                <i class="fas fa-circle"></i> Not connected
+            </span>
         </div>
     </header>
     
     <div class="container">
-        <h1>Blockchain Ride Sharing</h1>
-        
         <div class="map-container">
             <div id="map"></div>
+            <div id="map-instructions" class="map-instructions">
+                Click on the map to set locations or use the search fields below
+            </div>
         </div>
         
         <div class="ride-form">
-            <h2>Request a Ride</h2>
+            <h2><i class="fas fa-taxi"></i> Request a Ride</h2>
             <div class="form-group">
-                <label for="pickup">Pickup Location</label>
-                <input type="text" id="pickup" placeholder="Enter pickup location">
-                <button id="use-current-location" type="button">Use Current Location</button>
+                <label for="pickup">
+                    <i class="fas fa-map-marker-alt"></i> Pickup Location
+                </label>
+                <div class="input-group">
+                    <div class="search-container">
+                        <input type="text" id="pickup" placeholder="Type or click on map to set pickup location">
+                        <button id="pickup-search" class="search-button" title="Search location">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <button id="use-current-location" type="button" class="location-button" title="Use your current location">
+                        <i class="fas fa-location-arrow"></i>
+                        <span>Current Location</span>
+                    </button>
+                </div>
             </div>
             <div class="form-group">
-                <label for="destination">Destination</label>
-                <input type="text" id="destination" placeholder="Enter destination">
+                <label for="destination">
+                    <i class="fas fa-flag-checkered"></i> Destination
+                </label>
+                <div class="input-group">
+                    <div class="search-container">
+                        <input type="text" id="destination" placeholder="Type or click on map to set destination">
+                        <button id="destination-search" class="search-button" title="Search location">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <button id="calculate-route">Calculate Route</button>
-                <button id="request-ride">Request Ride</button>
+            <div class="form-group button-group">
+                <button id="calculate-route" class="action-button calculate-button">
+                    <i class="fas fa-route"></i>
+                    <span>Calculate Route</span>
+                </button>
+                <button id="request-ride" class="action-button request-button">
+                    <i class="fas fa-car-side"></i>
+                    <span>Request Ride</span>
+                </button>
             </div>
         </div>
         
         <div class="ride-status">
-            <h2>Ride Status</h2>
-            <div id="status-message">No active rides</div>
-            <div id="ride-details"></div>
+            <h2><i class="fas fa-info-circle"></i> Ride Status</h2>
+            <div id="status-message" class="status-message">Enter pickup and destination to begin</div>
+            <div id="ride-details" class="ride-details"></div>
         </div>
     </div>
 
     <!-- Web3.js for blockchain interaction -->
-    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js" crossorigin=""></script>
     
-    <script src="app.js"></script>
+    <!-- Custom JavaScript -->
+    <script src="app.js" defer></script>
 </body>
 </html> 
