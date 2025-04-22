@@ -137,6 +137,7 @@ async function setMessage() {
     }
 }
 
+//add this to edit the main
 // Initialize the app
 window.addEventListener('load', async function() {
     console.log('App initialization started');
