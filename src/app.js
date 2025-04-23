@@ -1,7 +1,7 @@
 let web3;
 let contract;
 // We'll use a test network instead of a local one
-const contractAddress = '0x1234567890123456789012345678901234567890'; // Replace with your deployed contract address
+const contractAddress = '0x84Acd4FCCa42F6e7D57f73739BD854D0Ce62B147'; // Replace with your deployed contract address
 
 // Global variables
 let map;
@@ -44,7 +44,7 @@ window.addEventListener('load', function() {
 });
 
 // Contract ABI and address - you'll need to replace these with your actual contract details
-const contractABI = [/* Your contract ABI here */];
+//const contractABI = [/* Your contract ABI here */];
 
 async function init() {
     // Check if MetaMask is installed
@@ -57,52 +57,132 @@ async function init() {
             // For testing purposes, we'll use a simple ABI
             const contractABI = [
                 {
-                    "inputs": [],
-                    "stateMutability": "nonpayable",
-                    "type": "constructor"
+                  "anonymous": false,
+                  "inputs": [
+                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" },
+                    { "indexed": false, "internalType": "address", "name": "driver", "type": "address" }
+                  ],
+                  "name": "RideAccepted",
+                  "type": "event"
                 },
                 {
-                    "anonymous": false,
-                    "inputs": [
-                        {
-                            "indexed": false,
-                            "internalType": "string",
-                            "name": "newMessage",
-                            "type": "string"
-                        }
-                    ],
-                    "name": "MessageUpdated",
-                    "type": "event"
+                  "anonymous": false,
+                  "inputs": [
+                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" }
+                  ],
+                  "name": "RideCompleted",
+                  "type": "event"
                 },
                 {
-                    "inputs": [],
-                    "name": "getMessage",
-                    "outputs": [
-                        {
-                            "internalType": "string",
-                            "name": "",
-                            "type": "string"
-                        }
-                    ],
-                    "stateMutability": "view",
-                    "type": "function"
+                  "anonymous": false,
+                  "inputs": [
+                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" }
+                  ],
+                  "name": "RideStarted",
+                  "type": "event"
                 },
                 {
-                    "inputs": [
-                        {
-                            "internalType": "string",
-                            "name": "_message",
-                            "type": "string"
-                        }
-                    ],
-                    "name": "setMessage",
-                    "outputs": [],
-                    "stateMutability": "nonpayable",
-                    "type": "function"
+                  "anonymous": false,
+                  "inputs": [
+                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" },
+                    { "indexed": false, "internalType": "address", "name": "rider", "type": "address" },
+                    { "indexed": false, "internalType": "string", "name": "origin", "type": "string" },
+                    { "indexed": false, "internalType": "string", "name": "destination", "type": "string" },
+                    { "indexed": false, "internalType": "uint256", "name": "cost", "type": "uint256" }
+                  ],
+                  "name": "RideRequested",
+                  "type": "event"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
+                  ],
+                  "name": "acceptRide",
+                  "outputs": [],
+                  "stateMutability": "nonpayable",
+                  "type": "function"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
+                  ],
+                  "name": "endRide",
+                  "outputs": [],
+                  "stateMutability": "nonpayable",
+                  "type": "function"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "address", "name": "user", "type": "address" }
+                  ],
+                  "name": "getDriverRides",
+                  "outputs": [
+                    { "internalType": "uint256[]", "name": "", "type": "uint256[]" }
+                  ],
+                  "stateMutability": "view",
+                  "type": "function"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
+                  ],
+                  "name": "getRideDetails",
+                  "outputs": [
+                    { "internalType": "address", "name": "", "type": "address" },
+                    { "internalType": "address", "name": "", "type": "address" },
+                    { "internalType": "string", "name": "", "type": "string" },
+                    { "internalType": "string", "name": "", "type": "string" },
+                    { "internalType": "uint256", "name": "", "type": "uint256" },
+                    { "internalType": "uint8", "name": "", "type": "uint8" }
+                  ],
+                  "stateMutability": "view",
+                  "type": "function"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "address", "name": "user", "type": "address" }
+                  ],
+                  "name": "getRiderRides",
+                  "outputs": [
+                    { "internalType": "uint256[]", "name": "", "type": "uint256[]" }
+                  ],
+                  "stateMutability": "view",
+                  "type": "function"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
+                  ],
+                  "name": "startRide",
+                  "outputs": [],
+                  "stateMutability": "nonpayable",
+                  "type": "function"
+                },
+                {
+                  "inputs": [
+                    { "internalType": "string", "name": "origin", "type": "string" },
+                    { "internalType": "string", "name": "destination", "type": "string" },
+                    { "internalType": "uint256", "name": "cost", "type": "uint256" }
+                  ],
+                  "name": "requestRide",
+                  "outputs": [
+                    { "internalType": "uint256", "name": "", "type": "uint256" }
+                  ],
+                  "stateMutability": "nonpayable",
+                  "type": "function"
+                },
+                {
+                  "inputs": [],
+                  "name": "rideCount",
+                  "outputs": [
+                    { "internalType": "uint256", "name": "", "type": "uint256" }
+                  ],
+                  "stateMutability": "view",
+                  "type": "function"
                 }
-            ];
-            
-            contract = new web3.eth.Contract(contractABI, contractAddress);
+              ];
+              
+              rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
             
             // For testing, we'll just show a message
             document.getElementById('currentMessage').textContent = "This is a demo. To use a real contract, deploy it to a test network and update the contract address.";
@@ -142,6 +222,7 @@ window.addEventListener('load', async function() {
     console.log('App initialization started');
     try {
         await initWeb3();
+        await init();
         await initMap();
         setupEventListeners();
         console.log('App initialization completed');
@@ -522,7 +603,7 @@ function calculateRoute() {
         const timeInMinutes = Math.round(summary.totalTime / 60);
         
         // Calculate a simple fare based on distance
-        const estimatedFare = (2.5 + (distanceInMiles * 1.5)).toFixed(2);
+        const estimatedFare = (0.005 + distanceInMiles * 0.0015).toFixed(5);
         
         // Update the ride details
         document.getElementById("ride-details").innerHTML = `
@@ -534,12 +615,12 @@ function calculateRoute() {
 }
 
 // Function to check if MetaMask is installed
+// Function to check if MetaMask is installed
 async function checkMetaMaskInstalled() {
     const connectWalletBtn = document.getElementById('connect-wallet');
     const statusMessage = document.getElementById('status-message');
     const rideDetails = document.getElementById('ride-details');
-    
-    // Check for MetaMask in multiple ways
+
     const isMetaMaskInstalled = () => {
         return Boolean(window.ethereum && window.ethereum.isMetaMask);
     };
@@ -550,101 +631,73 @@ async function checkMetaMaskInstalled() {
             <i class="fas fa-wallet"></i>
             <span>Connect Wallet</span>
         `;
+
         connectWalletBtn.onclick = async () => {
             try {
                 console.log('Requesting account access...');
-                const accounts = await window.ethereum.request({ 
-                    method: 'eth_requestAccounts' 
-                });
-                
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+
                 if (accounts.length > 0) {
                     console.log('Connected account:', accounts[0]);
                     updateConnectionStatus(true, accounts[0]);
-                    
-                    // Initialize the contract after connection
-                    try {
-                        rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
-                        console.log('Contract initialized');
-                        statusMessage.innerHTML = 'Ready to request a ride';
-                        rideDetails.innerHTML = '';
-                    } catch (error) {
-                        console.error('Error initializing contract:', error);
-                        showToast('Error initializing smart contract', 'error');
-                    }
+                    statusMessage.innerHTML = 'Wallet connected. Ready to request a ride.';
+                    rideDetails.innerHTML = '';
                 }
             } catch (error) {
                 console.error('Error connecting to MetaMask:', error);
                 if (error.code === 4001) {
-                    // User rejected the connection request
                     showToast('Please accept the connection request in MetaMask', 'error');
                 } else {
                     showToast('Error connecting to MetaMask. Please try refreshing the page.', 'error');
                 }
             }
         };
+
         return true;
     } else {
-        // Check if we're in a browser that should support MetaMask
+        // Browser checks
         const isCompatibleBrowser = () => {
-            const userAgent = window.navigator.userAgent.toLowerCase();
-            return (
-                userAgent.includes('chrome') || 
-                userAgent.includes('firefox') || 
-                userAgent.includes('edge') ||
-                userAgent.includes('opera')
-            );
+            const ua = navigator.userAgent.toLowerCase();
+            return ua.includes('chrome') || ua.includes('firefox') || ua.includes('edge') || ua.includes('opera');
         };
 
         if (isCompatibleBrowser()) {
-            // Browser is compatible but MetaMask not found
             statusMessage.innerHTML = `
                 <div class="metamask-notice">
                     <i class="fas fa-exclamation-circle"></i>
                     <p><strong>MetaMask Not Detected</strong></p>
-                    <p>We can see you're using a compatible browser, but MetaMask isn't detected. This could mean:</p>
+                    <p>Try:</p>
                     <ul>
-                        <li>MetaMask is installed but not enabled</li>
-                        <li>You need to refresh the page</li>
-                        <li>MetaMask needs to be installed</li>
-                    </ul>
-                    <p>Please try:</p>
-                    <ol>
-                        <li>Checking if MetaMask is enabled in your browser extensions</li>
                         <li>Refreshing this page</li>
-                        <li>Installing MetaMask if you haven't already</li>
-                    </ol>
+                        <li>Installing or enabling MetaMask</li>
+                    </ul>
                 </div>
             `;
-            
             connectWalletBtn.innerHTML = `
                 <i class="fas fa-sync-alt"></i>
                 <span>Refresh Page</span>
             `;
-            connectWalletBtn.onclick = () => {
-                window.location.reload();
-            };
+            connectWalletBtn.onclick = () => window.location.reload();
         } else {
-            // Browser is not compatible
             statusMessage.innerHTML = `
                 <div class="metamask-notice">
                     <i class="fas fa-exclamation-circle"></i>
                     <p><strong>Compatible Browser Required</strong></p>
-                    <p>Please use Chrome, Firefox, Edge, or Opera to access this application with MetaMask.</p>
+                    <p>Please use Chrome, Firefox, Edge, or Opera with MetaMask installed.</p>
                 </div>
             `;
-            
             connectWalletBtn.innerHTML = `
                 <i class="fas fa-download"></i>
                 <span>Install MetaMask</span>
             `;
-            connectWalletBtn.onclick = () => {
-                window.open('https://metamask.io/download/', '_blank');
-            };
+            connectWalletBtn.onclick = () => window.open('https://metamask.io/download/', '_blank');
         }
+
         rideDetails.innerHTML = '';
         return false;
     }
 }
+
 
 // Initialize Web3 and MetaMask connection
 async function initWeb3() {
@@ -771,8 +824,10 @@ async function requestRide() {
         // Update status
         document.getElementById("status-message").innerText = "Sending transaction to blockchain...";
         
+
+        console.log("✅ Contract instance:", rideSharingContract);
         // Call the smart contract to request a ride
-        const result = await rideSharingContract.methods.requestRide(pickup, destination)
+        const result = await rideSharingContract.methods.requestRide(pickup, destination,fare)
             .send({ from: accounts[0], value: fare });
         
         // Get the ride ID from the event
@@ -933,3 +988,4 @@ function enableMapClickLocation() {
 document.getElementById("switch-to-driver").addEventListener("click", function() {
     window.location.href = "driver.html";
 }); 
+
