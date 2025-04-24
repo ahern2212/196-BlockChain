@@ -365,17 +365,67 @@ function showRideRequest(rideId, rider, pickup, destination) {
     audio.play().catch(e => console.log("Audio play failed:", e));
 }
 
-// Ride action functions
+// Notify contract that driver has arrived at pickup location
 async function arrivedAtPickup() {
-    // Implementation of arrivedAtPickup function
+    if (!currentRideId) {
+        alert("No active ride.");
+        return;
+    }
+
+    try {
+        const accounts = await web3.eth.getAccounts();
+        await rideSharingContract.methods.arrivedAtPickup(currentRideId).send({ from: accounts[0] });
+
+        document.getElementById("status-message").textContent = "You’ve arrived at the pickup location.";
+        console.log("Driver arrived at pickup for ride:", currentRideId);
+    } catch (error) {
+        console.error("Error marking arrival at pickup:", error);
+        document.getElementById("status-message").textContent = "Failed to update pickup status.";
+    }
 }
 
+// Notify contract that ride has started
 async function startRide() {
-    // Implementation of startRide function
+    if (!currentRideId) {
+        alert("No active ride.");
+        return;
+    }
+
+    try {
+        const accounts = await web3.eth.getAccounts();
+        await rideSharingContract.methods.startRide(currentRideId).send({ from: accounts[0] });
+
+        document.getElementById("status-message").textContent = "Ride started.";
+        console.log("Ride started:", currentRideId);
+    } catch (error) {
+        console.error("Error starting ride:", error);
+        document.getElementById("status-message").textContent = "Failed to start ride.";
+    }
 }
 
+// Notify contract that ride is complete
 async function completeRide() {
-    // Implementation of completeRide function
+    if (!currentRideId) {
+        alert("No active ride.");
+        return;
+    }
+
+    try {
+        const accounts = await web3.eth.getAccounts();
+        await rideSharingContract.methods.completeRide(currentRideId).send({ from: accounts[0] });
+
+        document.getElementById("status-message").textContent = "Ride completed successfully!";
+        console.log("Ride completed:", currentRideId);
+
+        // Reset ride state
+        currentRideId = null;
+
+        // Optionally reset the UI or reload
+        // location.reload(); // if you want to refresh the whole page
+    } catch (error) {
+        console.error("Error completing ride:", error);
+        document.getElementById("status-message").textContent = "Failed to complete ride.";
+    }
 }
 
 // Make sure this is called when the page loads
