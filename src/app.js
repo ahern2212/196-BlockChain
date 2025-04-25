@@ -1,7 +1,7 @@
 let web3;
 let contract;
 // We'll use a test network instead of a local one
-const contractAddress = '0x84Acd4FCCa42F6e7D57f73739BD854D0Ce62B147'; // Replace with your deployed contract address
+const contractAddress = '0x9FFdaFB36Cf98Ba70d2dafFd36880704d3F4E291'; // Replace with your deployed contract address
 
 // Global variables
 let map;
@@ -43,8 +43,92 @@ window.addEventListener('load', function() {
     }
 });
 
-// Contract ABI and address - you'll need to replace these with your actual contract details
-//const contractABI = [/* Your contract ABI here */];
+// Contract ABI and address
+const contractABI = [
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "pickup",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "destination",
+                "type": "string"
+            }
+        ],
+        "name": "requestRide",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "rider",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "string",
+                "name": "pickup",
+                "type": "string"
+            },
+            {
+                "indexed": false,
+                "internalType": "string",
+                "name": "destination",
+                "type": "string"
+            }
+        ],
+        "name": "RideRequested",
+        "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "getActiveRideRequests",
+        "outputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "uint256[]",
+                        "name": "rideIds",
+                        "type": "uint256[]"
+                    },
+                    {
+                        "internalType": "address[]",
+                        "name": "riders",
+                        "type": "address[]"
+                    },
+                    {
+                        "internalType": "string[]",
+                        "name": "pickups",
+                        "type": "string[]"
+                    },
+                    {
+                        "internalType": "string[]",
+                        "name": "destinations",
+                        "type": "string[]"
+                    },
+                    {
+                        "internalType": "uint256[]",
+                        "name": "fares",
+                        "type": "uint256[]"
+                    }
+                ],
+                "internalType": "struct DriverManager.ActiveRides",
+                "name": "",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+];
 
 async function init() {
     // Check if MetaMask is installed
@@ -54,135 +138,7 @@ async function init() {
             await window.ethereum.request({ method: 'eth_requestAccounts' });
             web3 = new Web3(window.ethereum);
             
-            // For testing purposes, we'll use a simple ABI
-            const contractABI = [
-                {
-                  "anonymous": false,
-                  "inputs": [
-                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" },
-                    { "indexed": false, "internalType": "address", "name": "driver", "type": "address" }
-                  ],
-                  "name": "RideAccepted",
-                  "type": "event"
-                },
-                {
-                  "anonymous": false,
-                  "inputs": [
-                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" }
-                  ],
-                  "name": "RideCompleted",
-                  "type": "event"
-                },
-                {
-                  "anonymous": false,
-                  "inputs": [
-                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" }
-                  ],
-                  "name": "RideStarted",
-                  "type": "event"
-                },
-                {
-                  "anonymous": false,
-                  "inputs": [
-                    { "indexed": false, "internalType": "uint256", "name": "rideId", "type": "uint256" },
-                    { "indexed": false, "internalType": "address", "name": "rider", "type": "address" },
-                    { "indexed": false, "internalType": "string", "name": "origin", "type": "string" },
-                    { "indexed": false, "internalType": "string", "name": "destination", "type": "string" },
-                    { "indexed": false, "internalType": "uint256", "name": "cost", "type": "uint256" }
-                  ],
-                  "name": "RideRequested",
-                  "type": "event"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
-                  ],
-                  "name": "acceptRide",
-                  "outputs": [],
-                  "stateMutability": "nonpayable",
-                  "type": "function"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
-                  ],
-                  "name": "endRide",
-                  "outputs": [],
-                  "stateMutability": "nonpayable",
-                  "type": "function"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "address", "name": "user", "type": "address" }
-                  ],
-                  "name": "getDriverRides",
-                  "outputs": [
-                    { "internalType": "uint256[]", "name": "", "type": "uint256[]" }
-                  ],
-                  "stateMutability": "view",
-                  "type": "function"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
-                  ],
-                  "name": "getRideDetails",
-                  "outputs": [
-                    { "internalType": "address", "name": "", "type": "address" },
-                    { "internalType": "address", "name": "", "type": "address" },
-                    { "internalType": "string", "name": "", "type": "string" },
-                    { "internalType": "string", "name": "", "type": "string" },
-                    { "internalType": "uint256", "name": "", "type": "uint256" },
-                    { "internalType": "uint8", "name": "", "type": "uint8" }
-                  ],
-                  "stateMutability": "view",
-                  "type": "function"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "address", "name": "user", "type": "address" }
-                  ],
-                  "name": "getRiderRides",
-                  "outputs": [
-                    { "internalType": "uint256[]", "name": "", "type": "uint256[]" }
-                  ],
-                  "stateMutability": "view",
-                  "type": "function"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "uint256", "name": "rideId", "type": "uint256" }
-                  ],
-                  "name": "startRide",
-                  "outputs": [],
-                  "stateMutability": "nonpayable",
-                  "type": "function"
-                },
-                {
-                  "inputs": [
-                    { "internalType": "string", "name": "origin", "type": "string" },
-                    { "internalType": "string", "name": "destination", "type": "string" },
-                    { "internalType": "uint256", "name": "cost", "type": "uint256" }
-                  ],
-                  "name": "requestRide",
-                  "outputs": [
-                    { "internalType": "uint256", "name": "", "type": "uint256" }
-                  ],
-                  "stateMutability": "nonpayable",
-                  "type": "function"
-                },
-                {
-                  "inputs": [],
-                  "name": "rideCount",
-                  "outputs": [
-                    { "internalType": "uint256", "name": "", "type": "uint256" }
-                  ],
-                  "stateMutability": "view",
-                  "type": "function"
-                }
-              ];
-              
-              rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
+            rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
             
             // For testing, we'll just show a message
             document.getElementById('currentMessage').textContent = "This is a demo. To use a real contract, deploy it to a test network and update the contract address.";
@@ -803,52 +759,56 @@ function updateConnectionStatus(isConnected, account = null) {
 
 // Request a ride
 async function requestRide() {
-    // Check if we have both pickup and destination
-    if (!pickupCoords || !destinationCoords) {
-        alert("Please enter both pickup and destination locations");
-        return;
-    }
-    
-    // Check if route has been calculated
-    if (!routingControl) {
-        alert("Please calculate the route first");
-        return;
-    }
-    
-    const pickup = document.getElementById("pickup").value;
-    const destination = document.getElementById("destination").value;
-    
     try {
-        const accounts = await web3.eth.getAccounts();
-        const fare = web3.utils.toWei("0.01", "ether"); // Example fare amount
-        
-        // Update status
-        document.getElementById("status-message").innerText = "Sending transaction to blockchain...";
-        
+        // Check if pickup and destination are set
+        if (!pickupCoords || !destinationCoords) {
+            showToast('Please set both pickup and destination locations', 'error');
+            return;
+        }
 
-        console.log("✅ Contract instance:", rideSharingContract);
-        // Call the smart contract to request a ride
-        const result = await rideSharingContract.methods.requestRide(pickup, destination,fare)
-            .send({ from: accounts[0], value: fare });
-        
-        // Get the ride ID from the event
-        currentRideId = result.events.RideRequested.returnValues.rideId;
-        
-        document.getElementById("status-message").innerText = "Ride requested! Waiting for a driver...";
-        
-        // Listen for ride accepted event
-        rideSharingContract.events.RideAccepted({
-            filter: { rideId: currentRideId }
-        }, function(error, event) {
-            if (!error) {
-                const driver = event.returnValues.driver;
-                document.getElementById("status-message").innerText = `Ride accepted by driver ${driver.substr(0, 10)}...`;
-            }
-        });
-        
+        // Check if account is connected
+        const accounts = await web3.eth.getAccounts();
+        if (!accounts || accounts.length === 0) {
+            showToast('Please connect your wallet first', 'error');
+            return;
+        }
+
+        // Generate a random ride ID (8 characters)
+        const randomRideId = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+        // Convert coordinates to strings
+        const pickup = `${pickupCoords.lat},${pickupCoords.lng}`;
+        const destination = `${destinationCoords.lat},${destinationCoords.lng}`;
+
+        console.log('Requesting ride with parameters:');
+        console.log('Ride ID:', randomRideId);
+        console.log('Pickup:', pickup);
+        console.log('Destination:', destination);
+        console.log('From account:', accounts[0]);
+
+        // Send transaction to contract
+        const result = await rideSharingContract.methods.requestRide(pickup, destination)
+            .send({ from: accounts[0] });
+
+        console.log('Transaction result:', result);
+
+        // Check if transaction was successful
+        if (result.status) {
+            console.log('Ride requested successfully. Ride ID:', randomRideId);
+            showToast(`Ride requested successfully! Your Ride ID is: ${randomRideId}`, 'success');
+            
+            // Update UI
+            document.getElementById('status-message').textContent = `Waiting for a driver... (Ride ID: ${randomRideId})`;
+            document.getElementById('request-ride').disabled = true;
+            
+            // Store the current ride ID
+            currentRideId = randomRideId;
+        } else {
+            showToast('Transaction failed', 'error');
+        }
     } catch (error) {
-        console.error("Error requesting ride:", error);
-        document.getElementById("status-message").innerText = "Error requesting ride. See console for details.";
+        console.error('Error requesting ride:', error);
+        showToast(error.message || 'Failed to request ride', 'error');
     }
 }
 

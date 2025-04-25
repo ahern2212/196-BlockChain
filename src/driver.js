@@ -26,7 +26,10 @@ async function init() {
             initContract();
             
             // Check if driver is registered
-            checkDriverRegistration();
+            await checkDriverRegistration();
+            
+            // Check for active rides
+            await checkActiveRides();
             
             // Initialize map
             initMap();
@@ -64,235 +67,186 @@ function initContract() {
     // Replace with your contract ABI and address
     const contractABI = [
         {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "driverAddress",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "bool",
-              "name": "isAvailable",
-              "type": "bool"
-            }
-          ],
-          "name": "DriverAvailabilityUpdated",
-          "type": "event"
+            "anonymous": false,
+            "inputs": [
+                {
+                    "indexed": true,
+                    "internalType": "address",
+                    "name": "rider",
+                    "type": "address"
+                },
+                {
+                    "indexed": false,
+                    "internalType": "string",
+                    "name": "pickup",
+                    "type": "string"
+                },
+                {
+                    "indexed": false,
+                    "internalType": "string",
+                    "name": "destination",
+                    "type": "string"
+                }
+            ],
+            "name": "RideRequested",
+            "type": "event"
         },
         {
-          "anonymous": false,
-          "inputs": [
-            {
-              "indexed": true,
-              "internalType": "address",
-              "name": "driverAddress",
-              "type": "address"
-            },
-            {
-              "indexed": false,
-              "internalType": "string",
-              "name": "name",
-              "type": "string"
-            }
-          ],
-          "name": "DriverRegistered",
-          "type": "event"
+            "inputs": [
+                {
+                    "internalType": "string",
+                    "name": "_name",
+                    "type": "string"
+                },
+                {
+                    "internalType": "string",
+                    "name": "_vehicleInfo",
+                    "type": "string"
+                },
+                {
+                    "internalType": "string",
+                    "name": "_licenseNumber",
+                    "type": "string"
+                }
+            ],
+            "name": "registerDriver",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "uint256",
-              "name": "",
-              "type": "uint256"
-            }
-          ],
-          "name": "driverList",
-          "outputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function",
-          "constant": true
+            "inputs": [
+                {
+                    "internalType": "address",
+                    "name": "_address",
+                    "type": "address"
+                }
+            ],
+            "name": "isDriverRegistered",
+            "outputs": [
+                {
+                    "internalType": "bool",
+                    "name": "",
+                    "type": "bool"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "",
-              "type": "address"
-            }
-          ],
-          "name": "drivers",
-          "outputs": [
-            {
-              "internalType": "string",
-              "name": "name",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "vehicleInfo",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "licenseNumber",
-              "type": "string"
-            },
-            {
-              "internalType": "uint256",
-              "name": "totalEarnings",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bool",
-              "name": "isRegistered",
-              "type": "bool"
-            },
-            {
-              "internalType": "bool",
-              "name": "isAvailable",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function",
-          "constant": true
+            "inputs": [
+                {
+                    "internalType": "address",
+                    "name": "_address",
+                    "type": "address"
+                }
+            ],
+            "name": "getDriverDetails",
+            "outputs": [
+                {
+                    "internalType": "string",
+                    "name": "name",
+                    "type": "string"
+                },
+                {
+                    "internalType": "string",
+                    "name": "vehicleInfo",
+                    "type": "string"
+                },
+                {
+                    "internalType": "uint256",
+                    "name": "totalEarnings",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
         },
         {
-          "stateMutability": "payable",
-          "type": "receive",
-          "payable": true
+            "inputs": [
+                {
+                    "internalType": "bool",
+                    "name": "_isAvailable",
+                    "type": "bool"
+                }
+            ],
+            "name": "setDriverAvailability",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "string",
-              "name": "_name",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "_vehicleInfo",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "_licenseNumber",
-              "type": "string"
-            }
-          ],
-          "name": "registerDriver",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
+            "inputs": [],
+            "name": "getActiveRideRequests",
+            "outputs": [
+                {
+                    "internalType": "uint256[]",
+                    "name": "rideIds",
+                    "type": "uint256[]"
+                },
+                {
+                    "internalType": "address[]",
+                    "name": "riders",
+                    "type": "address[]"
+                },
+                {
+                    "internalType": "string[]",
+                    "name": "pickups",
+                    "type": "string[]"
+                },
+                {
+                    "internalType": "string[]",
+                    "name": "destinations",
+                    "type": "string[]"
+                },
+                {
+                    "internalType": "uint256[]",
+                    "name": "fares",
+                    "type": "uint256[]"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_driverAddress",
-              "type": "address"
-            }
-          ],
-          "name": "isDriverRegistered",
-          "outputs": [
-            {
-              "internalType": "bool",
-              "name": "",
-              "type": "bool"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function",
-          "constant": true
+            "inputs": [
+                {
+                    "internalType": "int256",
+                    "name": "latitude",
+                    "type": "int256"
+                },
+                {
+                    "internalType": "int256",
+                    "name": "longitude",
+                    "type": "int256"
+                }
+            ],
+            "name": "updateDriverLocation",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
         },
         {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_driverAddress",
-              "type": "address"
-            }
-          ],
-          "name": "getDriverDetails",
-          "outputs": [
-            {
-              "internalType": "string",
-              "name": "name",
-              "type": "string"
-            },
-            {
-              "internalType": "string",
-              "name": "vehicleInfo",
-              "type": "string"
-            },
-            {
-              "internalType": "uint256",
-              "name": "totalEarnings",
-              "type": "uint256"
-            }
-          ],
-          "stateMutability": "view",
-          "type": "function",
-          "constant": true
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "bool",
-              "name": "_isAvailable",
-              "type": "bool"
-            }
-          ],
-          "name": "setDriverAvailability",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address",
-              "name": "_driverAddress",
-              "type": "address"
-            },
-            {
-              "internalType": "uint256",
-              "name": "_amount",
-              "type": "uint256"
-            }
-          ],
-          "name": "addEarnings",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
-        },
-        {
-          "inputs": [
-            {
-              "internalType": "address payable",
-              "name": "_driverAddress",
-              "type": "address"
-            }
-          ],
-          "name": "transferEarnings",
-          "outputs": [],
-          "stateMutability": "nonpayable",
-          "type": "function"
+            "inputs": [],
+            "name": "rideCounter",
+            "outputs": [
+                {
+                    "internalType": "uint256",
+                    "name": "",
+                    "type": "uint256"
+                }
+            ],
+            "stateMutability": "view",
+            "type": "function"
         }
-      ];
-    const contractAddress = "0x68c18B11eA4789AAAc766bDC99fb4A8e394C8968"; // Replace with your contract address
+    ];
+    const contractAddress = "0x68c18B11eA4789AAAc766bDC99fb4A8e394C8968";
     
     rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
     console.log("Contract initialized");
+
+    // Debug: Print contract methods
+    console.log("Available contract methods:", rideSharingContract.methods);
 }
 
 // Check if the current account is registered as a driver
@@ -311,18 +265,14 @@ async function checkDriverRegistration() {
             // Update UI with driver details
             document.getElementById("driver-name").textContent = driverDetails.name;
             document.getElementById("driver-vehicle").textContent = driverDetails.vehicleInfo;
-            document.getElementById("driver-rating").textContent = 
-                driverDetails.totalRatings > 0 ? 
-                (driverDetails.ratingSum / driverDetails.totalRatings).toFixed(1) + " ⭐" : 
-                "No ratings yet";
-            document.getElementById("total-earnings").textContent = 
-                web3.utils.fromWei(driverDetails.totalEarnings, "ether") + " ETH";
+            document.getElementById("total-rides").textContent = driverDetails.totalEarnings.toString();
             
             // Hide register button
             document.getElementById("register-button").style.display = "none";
             
-            // Enable availability toggle
+            // Enable availability toggle and set its state
             document.getElementById("availability-toggle").disabled = false;
+            document.getElementById("availability-toggle").checked = true;
             
             document.getElementById("status-message").textContent = "Ready to accept rides.";
         } else {
@@ -515,14 +465,27 @@ function startLocationTracking() {
                 // Update driver location in contract
                 try {
                     const accounts = await web3.eth.getAccounts();
-                    await rideSharingContract.methods.updateDriverLocation(pos.lat, pos.lng)
-                        .send({ from: accounts[0] });
+                    // Convert coordinates to integers (multiply by 1e6 to preserve 6 decimal places)
+                    const latInt = Math.round(pos.lat * 1000000);
+                    const lngInt = Math.round(pos.lng * 1000000);
+                    
+                    console.log("Updating location with values:", {
+                        originalLat: pos.lat,
+                        originalLng: pos.lng,
+                        convertedLat: latInt,
+                        convertedLng: lngInt
+                    });
+                    
+                    await rideSharingContract.methods.updateDriverLocation(
+                        web3.utils.toBN(latInt),
+                        web3.utils.toBN(lngInt)
+                    ).send({ from: accounts[0] });
                 } catch (error) {
                     console.error("Error updating location:", error);
                 }
             },
-            () => {
-                console.log("Error: The Geolocation service failed.");
+            (error) => {
+                console.log("Error: The Geolocation service failed.", error);
             },
             { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
         );
@@ -536,29 +499,96 @@ function stopLocationTracking() {
     }
 }
 
-// Start listening for ride requests
-function startListeningForRideRequests() {
-    // Listen for RideRequested events from the contract
-    rideSharingContract.events.RideRequested({})
-        .on('data', function(event) {
-            const rideId = event.returnValues.rideId;
-            const rider = event.returnValues.rider;
-            const pickup = event.returnValues.pickup;
-            const destination = event.returnValues.destination;
+// Add function to check for active rides
+async function checkActiveRides() {
+    try {
+        const accounts = await web3.eth.getAccounts();
+        const account = accounts[0];
+        
+        console.log("Checking for active rides...");
+        
+        // Get active ride requests from contract
+        const result = await rideSharingContract.methods.getActiveRideRequests().call();
+        console.log("Active rides response:", result);
+        
+        // The result will have named arrays
+        const { rideIds, riders, pickups, destinations, fares } = result;
+        
+        if (rideIds && rideIds.length > 0) {
+            console.log("Number of active rides:", rideIds.length);
             
-            // Check if driver is available
-            if (document.getElementById("availability-toggle").checked) {
-                // Show ride request
-                showRideRequest(rideId, rider, pickup, destination);
+            // Loop through all rides
+            for (let i = 0; i < rideIds.length; i++) {
+                console.log(`Processing ride ${i}:`, {
+                    rideId: rideIds[i],
+                    rider: riders[i],
+                    pickup: pickups[i],
+                    destination: destinations[i],
+                    fare: fares[i]
+                });
+                
+                // Check if this ride request is already displayed
+                const existingRequest = document.getElementById(`request-${rideIds[i]}`);
+                if (!existingRequest) {
+                    showRideRequest(rideIds[i], riders[i], pickups[i], destinations[i], fares[i]);
+                }
             }
-        })
-        .on('error', function(error) {
-            console.error("Error listening for ride requests:", error);
+        } else {
+            console.log("No active rides found");
+        }
+    } catch (error) {
+        console.error("Error checking active rides:", error);
+        console.error("Error details:", {
+            message: error.message,
+            code: error.code,
+            data: error.data
         });
+        
+        // Additional debug information
+        console.log("Contract address:", rideSharingContract._address);
+        console.log("Contract methods:", Object.keys(rideSharingContract.methods));
+    }
+}
+
+// Update startListeningForRideRequests to match the contract event
+function startListeningForRideRequests() {
+    // Check active rides every 30 seconds
+    setInterval(checkActiveRides, 30000);
+    
+    // Listen for RideRequested events from the contract
+    rideSharingContract.events.RideRequested({
+        fromBlock: 'latest'
+    })
+    .on('data', function(event) {
+        console.log("New ride request event:", event);
+        
+        // Get the event parameters from returnValues
+        const rider = event.returnValues.rider;
+        const pickup = event.returnValues.pickup;
+        const destination = event.returnValues.destination;
+        
+        // Only show if driver is available
+        if (document.getElementById("availability-toggle").checked) {
+            // Get the latest ride ID
+            rideSharingContract.methods.rideCounter().call()
+            .then(counter => {
+                const rideId = counter - 1; // Latest ride ID
+                showRideRequest(rideId, rider, pickup, destination, 0); // Fare will be updated when getting active rides
+            })
+            .catch(error => {
+                console.error("Error getting ride counter:", error);
+            });
+        }
+    })
+    .on('error', function(error) {
+        console.error("Error listening for ride requests:", error);
+    });
 }
 
 // Show a ride request
-function showRideRequest(rideId, rider, pickup, destination) {
+function showRideRequest(rideId, rider, pickup, destination, fare) {
+    console.log("Showing ride request:", { rideId, rider, pickup, destination, fare });
+    
     // Remove "no requests" message if present
     const noRequestsMsg = document.querySelector(".no-requests");
     if (noRequestsMsg) {
@@ -571,9 +601,11 @@ function showRideRequest(rideId, rider, pickup, destination) {
     requestElement.id = `request-${rideId}`;
     requestElement.innerHTML = `
         <div class="request-details">
+            <p><strong>Ride ID:</strong> ${rideId}</p>
             <p><strong>From:</strong> ${pickup}</p>
             <p><strong>To:</strong> ${destination}</p>
             <p><strong>Rider:</strong> ${rider.substr(0, 10)}...</p>
+            <p><strong>Fare:</strong> ${web3.utils.fromWei(fare.toString(), 'ether')} ETH</p>
         </div>
         <div class="request-actions">
             <button class="accept-button" onclick="acceptRide('${rideId}')">Accept</button>
@@ -582,7 +614,12 @@ function showRideRequest(rideId, rider, pickup, destination) {
     `;
     
     // Add to requests container
-    document.getElementById("requests-container").appendChild(requestElement);
+    const requestsContainer = document.getElementById("requests-container");
+    if (requestsContainer) {
+        requestsContainer.appendChild(requestElement);
+    } else {
+        console.error("Requests container not found");
+    }
     
     // Play notification sound
     const audio = new Audio('notification.mp3');
@@ -615,3 +652,4 @@ window.addEventListener('load', function() {
         });
     }
 });
+

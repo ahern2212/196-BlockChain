@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 contract RideManager {
-    enum RideStatus { Requested, Accepted, Started, Completed }
+    enum RideStatus { Requested, Accepted, Started, Completed, Declined }
 
     struct Ride {
         address rider;
@@ -22,6 +22,7 @@ contract RideManager {
     event RideAccepted(uint rideId, address driver);
     event RideStarted(uint rideId);
     event RideCompleted(uint rideId);
+    event RideDeclined(uint rideId, address driver);
 
     function requestRide(string memory origin, string memory destination, uint cost) public returns (uint) {
         Ride storage r = rides[rideCount];
@@ -67,6 +68,15 @@ contract RideManager {
         emit RideCompleted(rideId);
     }
 
+    function declineRide(uint rideId) public {
+        Ride storage r = rides[rideId];
+        require(r.status == RideStatus.Requested, "Ride not available for declining");
+        r.status = RideStatus.Declined;
+        r.driver = msg.sender;
+
+        emit RideDeclined(rideId, msg.sender);
+    }
+
     function getRideDetails(uint rideId) public view returns (
         address, address, string memory, string memory, uint, RideStatus
     ) {
@@ -79,6 +89,49 @@ contract RideManager {
         return riderRides[user];
     } else {
         return driverRides[user];
+    }
+}
+
+function getActiveRideRequests() public view returns (
+    uint256[] memory rideIds,
+    address[] memory riders,
+    string[] memory pickups,
+    string[] memory destinations,
+    uint256[] memory fares,
+    int256[] memory pickupLats,
+    int256[] memory pickupLngs
+) {
+    // Count pending rides first
+    uint256 pendingCount = 0;
+    for (uint256 i = 0; i < rideCount; i++) {
+        if (rides[i].status == RideStatus.Requested) {
+            pendingCount++;
+        }
+    }
+
+    // Initialize arrays
+    rideIds = new uint256[](pendingCount);
+    riders = new address[](pendingCount);
+    pickups = new string[](pendingCount);
+    destinations = new string[](pendingCount);
+    fares = new uint256[](pendingCount);
+    pickupLats = new int256[](pendingCount);
+    pickupLngs = new int256[](pendingCount);
+
+    // Fill arrays with pending ride data
+    uint256 index = 0;
+    for (uint256 i = 0; i < rideCount; i++) {
+        if (rides[i].status == RideStatus.Requested) {
+            Ride memory r = rides[i];
+            rideIds[index] = i;
+            riders[index] = r.rider;
+            pickups[index] = r.origin;
+            destinations[index] = r.destination;
+            fares[index] = r.cost;
+            pickupLats[index] = 0; // Assuming pickupLat is not available in the struct
+            pickupLngs[index] = 0; // Assuming pickupLng is not available in the struct
+            index++;
+        }
     }
 }
 }
