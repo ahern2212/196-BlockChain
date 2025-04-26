@@ -108,6 +108,189 @@
         </div>
     </div>
 
+    <!-- Add active ride panel for riders -->
+    <div id="active-ride-panel" class="panel" style="display: none;">
+        <h2>Your Active Ride</h2>
+        <div class="driver-details">
+            <h3>Driver Information</h3>
+            <div class="driver-info-container">
+                <div class="driver-avatar">
+                    <i class="fas fa-user-circle"></i>
+                </div>
+                <div class="driver-info">
+                    <p><strong>Name:</strong> <span id="driver-name">Loading...</span></p>
+                    <p><strong>Vehicle:</strong> <span id="driver-vehicle">Loading...</span></p>
+                    <p><strong>Rating:</strong> <span id="driver-rating">N/A</span></p>
+                </div>
+            </div>
+        </div>
+        <div class="ride-status-container">
+            <h3>Ride Status</h3>
+            <div class="ride-status">
+                <div class="status-item active" id="status-requested">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Requested</span>
+                </div>
+                <div class="status-connector"></div>
+                <div class="status-item" id="status-accepted">
+                    <i class="fas fa-car"></i>
+                    <span>Driver Assigned</span>
+                </div>
+                <div class="status-connector"></div>
+                <div class="status-item" id="status-arrived">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span>Driver Arrived</span>
+                </div>
+                <div class="status-connector"></div>
+                <div class="status-item" id="status-inprogress">
+                    <i class="fas fa-road"></i>
+                    <span>In Progress</span>
+                </div>
+                <div class="status-connector"></div>
+                <div class="status-item" id="status-completed">
+                    <i class="fas fa-flag-checkered"></i>
+                    <span>Completed</span>
+                </div>
+            </div>
+        </div>
+        <div class="ride-details">
+            <h3>Ride Details</h3>
+            <p><strong>From:</strong> <span id="active-pickup">Loading...</span></p>
+            <p><strong>To:</strong> <span id="active-destination">Loading...</span></p>
+            <p><strong>Fare:</strong> <span id="active-fare">Loading...</span></p>
+            <p><strong>Estimated Arrival:</strong> <span id="estimated-arrival">Calculating...</span></p>
+        </div>
+        <div class="ride-actions">
+            <button id="contact-driver" class="ride-button">
+                <i class="fas fa-phone"></i> Contact Driver
+            </button>
+            <button id="cancel-ride" class="ride-button cancel">
+                <i class="fas fa-times"></i> Cancel Ride
+            </button>
+        </div>
+    </div>
+
+    <!-- Add CSS for the active ride panel -->
+    <style>
+        #active-ride-panel {
+            margin-top: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .driver-details {
+            margin-bottom: 20px;
+        }
+        
+        .driver-info-container {
+            display: flex;
+            align-items: center;
+        }
+        
+        .driver-avatar {
+            font-size: 3rem;
+            color: #4285F4;
+            margin-right: 15px;
+        }
+        
+        .driver-info p {
+            margin: 5px 0;
+        }
+        
+        .ride-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #9e9e9e;
+        }
+        
+        .status-item i {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+        
+        .status-item.active {
+            color: #4CAF50;
+        }
+        
+        .status-connector {
+            flex-grow: 1;
+            height: 2px;
+            background-color: #e0e0e0;
+            margin: 0 5px;
+        }
+        
+        .ride-details h3, .driver-details h3, .ride-status-container h3 {
+            margin-top: 0;
+            color: #424242;
+            font-size: 1.2rem;
+        }
+        
+        .ride-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        .ride-button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4285F4;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .ride-button.cancel {
+            background-color: #f44336;
+        }
+        
+        .ride-button:hover {
+            opacity: 0.9;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+            }
+        }
+        
+        .driver-arrived-notification {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .driver-arrived-notification i {
+            font-size: 1.5rem;
+        }
+    </style>
+
     <!-- Web3.js for blockchain interaction -->
     <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js" crossorigin=""></script>
     

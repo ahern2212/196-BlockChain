@@ -966,7 +966,11 @@ async function testContractDirectly() {
     }
 }
 
-// Request a ride
+// Rider's active ride ID
+let activeRideId = null;
+let rideStatusPoller = null;
+
+// Function to request a ride - modified to show ride status panel
 async function requestRide() {
     try {
         console.log('======= RIDE REQUEST INITIATED =======');
@@ -1010,43 +1014,498 @@ async function requestRide() {
             rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
         }
 
-        // Generate a random ride ID (8 characters)
-        const randomRideId = Math.random().toString(36).substring(2, 10).toUpperCase();
-
         // Calculate ride cost (this can be based on distance or fixed amount)
         const cost = web3.utils.toWei('0.01', 'ether'); // 0.01 ETH for testing
         console.log('Cost:', cost, 'wei');
 
         console.log('Sending transaction to contract...');
+        
+        // Show loading state
+        const requestBtn = document.getElementById('request-ride');
+        requestBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Requesting...';
+        requestBtn.disabled = true;
+        
         const result = await rideSharingContract.methods.requestRide(
-            pickup,          // Use the input value directly
-            destination,     // Use the input value directly
+            pickup,
+            destination,
             cost
         ).send({ 
             from: accounts[0],
-            gas: 500000      // Explicit gas limit
+            gas: 500000
         });
 
         console.log('Transaction result:', result);
 
         // Check if transaction was successful
         if (result.status) {
-            console.log('SUCCESS! Ride requested. Ride ID:', randomRideId);
-            showToast(`Ride requested successfully! Your Ride ID is: ${randomRideId}`, 'success');
+            // Extract ride ID from the event or get it from the result
+            let rideId;
+            if (result.events && result.events.RideRequested) {
+                rideId = result.events.RideRequested.returnValues.rideId;
+            } else {
+                // Fallback if event not found
+                rideId = await getLastRideId(accounts[0]);
+            }
             
-            // Update UI
-            document.getElementById('status-message').textContent = `Waiting for a driver... (Ride ID: ${randomRideId})`;
-            document.getElementById('request-ride').disabled = true;
+            activeRideId = rideId;
             
-            // Store the current ride ID
-            currentRideId = randomRideId;
+            console.log('SUCCESS! Ride requested. Ride ID:', rideId);
+            showToast(`Ride requested successfully!`, 'success');
+            
+            // Update UI to show ride status panel
+            document.getElementById('active-pickup').textContent = pickup;
+            document.getElementById('active-destination').textContent = destination;
+            document.getElementById('active-fare').textContent = `${web3.utils.fromWei(cost, 'ether')} ETH`;
+            
+            // Show the active ride panel
+            document.getElementById('active-ride-panel').style.display = 'block';
+            
+            // Hide ride form if necessary
+            const rideForm = document.querySelector('.ride-form');
+            if (rideForm) {
+                rideForm.style.display = 'none';
+            }
+            
+            // Set initial ride status
+            updateRideStatus('requested');
+            
+            // Start polling for ride status updates
+            startRideStatusPolling(rideId);
+            
+            // Reset request button
+            requestBtn.innerHTML = '<i class="fas fa-car"></i> Request Ride';
+            requestBtn.disabled = false;
         } else {
             showToast('Transaction failed', 'error');
+            // Reset request button
+            requestBtn.innerHTML = '<i class="fas fa-car"></i> Request Ride';
+            requestBtn.disabled = false;
         }
     } catch (error) {
         console.error('Error requesting ride:', error);
         showToast(error.message || 'Failed to request ride', 'error');
+        
+        // Reset request button
+        const requestBtn = document.getElementById('request-ride');
+        requestBtn.innerHTML = '<i class="fas fa-car"></i> Request Ride';
+        requestBtn.disabled = false;
     }
+}
+
+// Get the last ride ID for an account
+async function getLastRideId(account) {
+    try {
+        // Get all rides for this user
+        const rides = await rideSharingContract.methods.getUserRides(account).call();
+        if (rides && rides.length > 0) {
+            return rides[rides.length - 1];
+        }
+        return null;
+    } catch (error) {
+        console.error('Error getting last ride ID:', error);
+        return null;
+    }
+}
+
+// Function to start polling for ride status updates
+function startRideStatusPolling(rideId) {
+    // Clear any existing poller
+    if (rideStatusPoller) {
+        clearInterval(rideStatusPoller);
+    }
+    
+    // Poll every 5 seconds
+    rideStatusPoller = setInterval(() => {
+        checkRideStatus(rideId);
+    }, 5000);
+    
+    // Immediately check status
+    checkRideStatus(rideId);
+}
+
+// Function to check ride status
+async function checkRideStatus(rideId) {
+    try {
+        // Get current ride details
+        const rideDetails = await rideSharingContract.methods.getRideDetails(rideId).call();
+        console.log('Ride details:', rideDetails);
+        
+        // Status codes: 0 = Requested, 1 = Accepted, 2 = Started, 3 = Completed, 4 = Declined
+        const statusCode = parseInt(rideDetails[5]); // Access status from the returned array
+        
+        // Update ride status based on contract state
+        switch(statusCode) {
+            case 0: // Requested
+                updateRideStatus('requested');
+                // Make sure the active ride panel is visible
+                document.getElementById('active-ride-panel').style.display = 'block';
+                break;
+                
+            case 1: // Accepted
+                updateRideStatus('accepted');
+                // Make sure the active ride panel is visible
+                document.getElementById('active-ride-panel').style.display = 'block';
+                
+                // Show driver info when ride is accepted
+                if (rideDetails[1] && rideDetails[1] !== '0x0000000000000000000000000000000000000000') {
+                    getDriverInformation(rideDetails[1]);
+                    
+                    // For demo purposes, simulate driver arrival after a delay
+                    setTimeout(() => {
+                        showDriverArrivedNotification();
+                        updateRideStatus('arrived');
+                    }, 10000); // Show driver arrival 10 seconds after acceptance
+                }
+                break;
+                
+            case 2: // Started
+                updateRideStatus('inprogress');
+                break;
+                
+            case 3: // Completed
+                updateRideStatus('completed');
+                // Stop polling once ride is completed
+                if (rideStatusPoller) {
+                    clearInterval(rideStatusPoller);
+                    rideStatusPoller = null;
+                }
+                
+                // Show ride completion screen after a delay
+                setTimeout(() => {
+                    showRideCompletionScreen(rideId, {
+                        fare: rideDetails[4] // Get fare from the array
+                    });
+                }, 2000);
+                break;
+                
+            case 4: // Declined
+                // Handle declined ride
+                showToast('Your ride request was declined by the driver', 'error');
+                resetRideRequest();
+                break;
+                
+            default:
+                console.log('Unknown ride status:', statusCode);
+        }
+    } catch (error) {
+        console.error('Error checking ride status:', error);
+    }
+}
+
+// Update ride status UI
+function updateRideStatus(status) {
+    // Reset all statuses
+    document.querySelectorAll('.status-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Activate current status and all previous ones
+    switch(status) {
+        case 'completed':
+            document.getElementById('status-completed').classList.add('active');
+            // fall through
+        case 'inprogress':
+            document.getElementById('status-inprogress').classList.add('active');
+            // fall through
+        case 'arrived':
+            document.getElementById('status-arrived').classList.add('active');
+            // fall through
+        case 'accepted':
+            document.getElementById('status-accepted').classList.add('active');
+            // fall through
+        case 'requested':
+            document.getElementById('status-requested').classList.add('active');
+            break;
+    }
+    
+    // Update estimated arrival text
+    updateEstimatedArrival(status);
+}
+
+// Update estimated arrival time based on status
+function updateEstimatedArrival(status) {
+    const estimatedArrivalEl = document.getElementById('estimated-arrival');
+    
+    if (status === 'requested') {
+        estimatedArrivalEl.textContent = 'Waiting for driver...';
+    } else if (status === 'accepted') {
+        // Generate a random ETA between 3-10 minutes
+        const eta = Math.floor(Math.random() * 8) + 3;
+        estimatedArrivalEl.textContent = `${eta} minutes`;
+    } else if (status === 'arrived') {
+        estimatedArrivalEl.textContent = 'Driver has arrived!';
+    } else if (status === 'inprogress') {
+        // Calculate destination ETA (random for demo)
+        const eta = Math.floor(Math.random() * 15) + 5;
+        estimatedArrivalEl.textContent = `${eta} minutes to destination`;
+    } else if (status === 'completed') {
+        estimatedArrivalEl.textContent = 'Ride completed';
+    }
+}
+
+// Get driver information
+async function getDriverInformation(driverAddress) {
+    try {
+        // Get driver details from contract
+        const driverDetails = await rideSharingContract.methods.getDriverDetails(driverAddress).call();
+        console.log('Driver details:', driverDetails);
+        
+        // Update UI with driver info - assuming array format: [name, vehicleInfo, license, isAvailable, totalRides]
+        const driverName = driverDetails[0] || 'Unknown Driver';
+        const vehicleInfo = driverDetails[1] || 'Vehicle information unavailable';
+        
+        document.getElementById('driver-name').textContent = driverName;
+        document.getElementById('driver-vehicle').textContent = vehicleInfo;
+        
+        // Set a random rating between 4.0 and 5.0 for demo purposes
+        const randomRating = (4 + Math.random()).toFixed(1);
+        document.getElementById('driver-rating').textContent = `${randomRating}⭐`;
+        
+        // Show driver assigned notification
+        showToast(`Driver ${driverName} has been assigned to your ride`, 'success');
+    } catch (error) {
+        console.error('Error getting driver information:', error);
+        document.getElementById('driver-name').textContent = 'Error loading driver info';
+        document.getElementById('driver-vehicle').textContent = 'Vehicle information unavailable';
+        document.getElementById('driver-rating').textContent = 'N/A';
+    }
+}
+
+// Check if driver has arrived (in a real app this would be event-based)
+function checkIfDriverArrived() {
+    // For demo purposes, show driver arrival after a random delay (5-15 seconds)
+    const arrivalDelay = Math.floor(Math.random() * 10000) + 5000;
+    
+    setTimeout(() => {
+        // Show driver arrived notification
+        showDriverArrivedNotification();
+        
+        // Update ride status
+        updateRideStatus('arrived');
+    }, arrivalDelay);
+}
+
+// Show driver arrival notification
+function showDriverArrivedNotification() {
+    // Check if notification already exists
+    if (document.querySelector('.driver-arrived-notification')) {
+        return; // Don't create duplicate notifications
+    }
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'driver-arrived-notification';
+    notification.innerHTML = `
+        <i class="fas fa-map-marker-alt"></i>
+        <div>
+            <strong>Your driver has arrived!</strong>
+            <p>Please proceed to the pickup location.</p>
+        </div>
+    `;
+    
+    // Add notification to the top of the ride panel
+    const ridePanel = document.getElementById('active-ride-panel');
+    ridePanel.insertBefore(notification, ridePanel.firstChild);
+    
+    // Play notification sound
+    try {
+        const audio = new Audio('notification.mp3');
+        audio.play().catch(e => console.log("Audio play failed:", e));
+    } catch (e) {
+        console.log("Could not play notification sound:", e);
+    }
+    
+    // Remove notification after 10 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            notification.remove();
+        }, 500);
+    }, 10000);
+}
+
+// Show ride completion screen
+function showRideCompletionScreen(rideId, rideDetails) {
+    // Create a completion overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'completion-overlay';
+    
+    const fare = web3.utils.fromWei(rideDetails.fare.toString(), 'ether');
+    
+    overlay.innerHTML = `
+        <div class="completion-card">
+            <div class="completion-header">
+                <i class="fas fa-check-circle"></i>
+                <h2>Ride Completed</h2>
+            </div>
+            <div class="completion-details">
+                <p>Thank you for using our ride-sharing service!</p>
+                <p>Your fare: <strong>${fare} ETH</strong></p>
+                <div class="rating-container">
+                    <p>Rate your driver:</p>
+                    <div class="star-rating">
+                        <i class="fas fa-star" data-rating="1"></i>
+                        <i class="fas fa-star" data-rating="2"></i>
+                        <i class="fas fa-star" data-rating="3"></i>
+                        <i class="fas fa-star" data-rating="4"></i>
+                        <i class="fas fa-star" data-rating="5"></i>
+                    </div>
+                </div>
+            </div>
+            <button id="close-completion" class="completion-button">Done</button>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    // Add star rating functionality
+    const stars = overlay.querySelectorAll('.fa-star');
+    stars.forEach(star => {
+        star.addEventListener('click', function() {
+            const rating = this.getAttribute('data-rating');
+            
+            // Remove active class from all stars
+            stars.forEach(s => s.classList.remove('active'));
+            
+            // Add active class to clicked star and all previous ones
+            stars.forEach(s => {
+                if (s.getAttribute('data-rating') <= rating) {
+                    s.classList.add('active');
+                }
+            });
+            
+            // Submit rating to contract
+            submitDriverRating(rideId, rating);
+        });
+    });
+    
+    // Close button functionality
+    document.getElementById('close-completion').addEventListener('click', function() {
+        overlay.remove();
+        resetRideRequest();
+    });
+    
+    // Add CSS for the completion screen
+    const style = document.createElement('style');
+    style.textContent = `
+        .completion-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .completion-card {
+            background-color: white;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        
+        .completion-header {
+            margin-bottom: 20px;
+        }
+        
+        .completion-header i {
+            font-size: 3rem;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        .completion-details {
+            margin-bottom: 20px;
+        }
+        
+        .rating-container {
+            margin-top: 20px;
+        }
+        
+        .star-rating {
+            font-size: 2rem;
+            color: #ccc;
+        }
+        
+        .star-rating i {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .star-rating i:hover,
+        .star-rating i.active {
+            color: #FFD700;
+        }
+        
+        .completion-button {
+            padding: 10px 30px;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+    `;
+    
+    document.head.appendChild(style);
+}
+
+// Submit driver rating
+async function submitDriverRating(rideId, rating) {
+    try {
+        const accounts = await web3.eth.getAccounts();
+        
+        await rideSharingContract.methods.rateDriver(rideId, rating)
+            .send({ from: accounts[0], gas: 200000 });
+        
+        showToast('Rating submitted. Thank you for your feedback!', 'success');
+    } catch (error) {
+        console.error('Error submitting rating:', error);
+        showToast('Failed to submit rating', 'error');
+    }
+}
+
+// Reset ride request UI
+function resetRideRequest() {
+    // Clear active ride ID
+    activeRideId = null;
+    
+    // Stop polling for status updates
+    if (rideStatusPoller) {
+        clearInterval(rideStatusPoller);
+        rideStatusPoller = null;
+    }
+    
+    // Hide active ride panel
+    document.getElementById('active-ride-panel').style.display = 'none';
+    
+    // Show ride request form
+    document.getElementById('ride-request-section').style.display = 'block';
+    
+    // Reset form fields
+    document.getElementById('pickup').value = '';
+    document.getElementById('destination').value = '';
+    
+    // Clear the route from the map
+    if (routingControl) {
+        map.removeControl(routingControl);
+        routingControl = null;
+    }
+    
+    // Clear all markers except user location
+    map.eachLayer(function(layer) {
+        if (layer instanceof L.Marker && layer !== userLocationMarker) {
+            map.removeLayer(layer);
+        }
+    });
 }
 
 // Function to search for a location
