@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+        #console {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        .info {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+    <h1>Blockchain Contract Test</h1>
+    
+    <div class="container">
+        <h2>Contract Information</h2>
+        <p>Contract Address: <span id="contract-address">0x5920477F11365B28596a2748951BA8178Dc95238</span></p>
+        <p>Connected Account: <span id="account-address">Not connected</span></p>
+        <button id="connect-wallet">Connect Wallet</button>
+    </div>
+    
+    <div class="container">
+        <h2>Request Ride Test</h2>
+        <div>
+            <label for="pickup">Pickup Location:</label>
+            <input type="text" id="pickup" value="Test Pickup Location">
+        </div>
+        <div>
+            <label for="destination">Destination:</label>
+            <input type="text" id="destination" value="Test Destination">
+        </div>
+        <div>
+            <label for="cost">Cost (ETH):</label>
+            <input type="text" id="cost" value="0.01">
+        </div>
+        <button id="test-contract">Test Contract</button>
+    </div>
+    
+    <div id="console"></div>
+    
+    <script>
+        // Contract ABI
+        const contractABI = [
+            {
+                "inputs": [
+                    {
+                        "internalType": "string",
+                        "name": "origin",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "destination",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "cost",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "requestRide",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+        
+        // Get contract address from span
+        const contractAddress = document.getElementById('contract-address').textContent;
+        
+        // Get elements
+        const connectWalletBtn = document.getElementById('connect-wallet');
+        const testContractBtn = document.getElementById('test-contract');
+        const accountAddressSpan = document.getElementById('account-address');
+        const consoleDiv = document.getElementById('console');
+        
+        // Web3 instance
+        let web3;
+        let contract;
+        let accounts = [];
+        
+        // Log to console
+        function log(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.classList.add(type);
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(logEntry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        // Initialize web3
+        async function initWeb3() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    web3 = new Web3(window.ethereum);
+                    log('Web3 initialized.');
+                    return true;
+                } catch (error) {
+                    log(`Error initializing Web3: ${error.message}`, 'error');
+                    return false;
+                }
+            } else {
+                log('MetaMask not installed!', 'error');
+                return false;
+            }
+        }
+        
+        // Connect wallet
+        async function connectWallet() {
+            try {
+                accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                accountAddressSpan.textContent = accounts[0];
+                log(`Connected to account: ${accounts[0]}`, 'success');
+                
+                // Initialize contract
+                contract = new web3.eth.Contract(contractABI, contractAddress);
+                log(`Contract initialized at address: ${contractAddress}`, 'success');
+                
+                return true;
+            } catch (error) {
+                log(`Error connecting wallet: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // Test contract
+        async function testContract() {
+            try {
+                if (!contract) {
+                    log('Contract not initialized!', 'error');
+                    return;
+                }
+                
+                const pickup = document.getElementById('pickup').value;
+                const destination = document.getElementById('destination').value;
+                const costEth = document.getElementById('cost').value;
+                const cost = web3.utils.toWei(costEth, 'ether');
+                
+                log(`Testing contract with parameters:`, 'info');
+                log(`Pickup: ${pickup}`, 'info');
+                log(`Destination: ${destination}`, 'info');
+                log(`Cost: ${costEth} ETH (${cost} wei)`, 'info');
+                
+                const result = await contract.methods.requestRide(pickup, destination, cost)
+                    .send({ 
+                        from: accounts[0], 
+                        gas: 500000 
+                    });
+                
+                log(`Transaction successful!`, 'success');
+                log(`Transaction hash: ${result.transactionHash}`, 'success');
+                log(`Gas used: ${result.gasUsed}`, 'info');
+                
+                if (result.events && result.events.RideRequested) {
+                    const rideId = result.events.RideRequested.returnValues.rideId;
+                    log(`Ride ID: ${rideId}`, 'success');
+                }
+                
+                return result;
+            } catch (error) {
+                log(`Error testing contract: ${error.message}`, 'error');
+                
+                // Check for specific errors
+                if (error.message.includes('execution reverted')) {
+                    log('Transaction reverted by the contract. Check your contract code.', 'error');
+                } else if (error.message.includes('gas')) {
+                    log('Gas-related error. Try increasing the gas limit.', 'error');
+                }
+                
+                return null;
+            }
+        }
+        
+        // Event listeners
+        connectWalletBtn.addEventListener('click', async () => {
+            if (await initWeb3()) {
+                await connectWallet();
+            }
+        });
+        
+        testContractBtn.addEventListener('click', async () => {
+            if (!accounts.length) {
+                log('Please connect your wallet first!', 'error');
+                return;
+            }
+            
+            await testContract();
+        });
+        
+        // Initialize on load
+        window.addEventListener('load', async () => {
+            log('Page loaded. Please connect your wallet to begin testing.', 'info');
+            if (await initWeb3()) {
+                log('Web3 initialized. Click "Connect Wallet" to continue.', 'info');
+            }
+        });
+    </script>
+</body>
+</html> 

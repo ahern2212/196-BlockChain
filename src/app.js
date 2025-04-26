@@ -1,7 +1,6 @@
 let web3;
-let contract;
-// We'll use a test network instead of a local one
-const contractAddress = '0x9FFdaFB36Cf98Ba70d2dafFd36880704d3F4E291'; // Replace with your deployed contract address
+let rideSharingContract;
+const contractAddress = '0x3a63499187455805AD9C153F9dEEdc9b6189bf0E'; // Use the RideSharingPlatform contract address
 
 // Global variables
 let map;
@@ -9,9 +8,10 @@ let routingControl;
 let pickupMarker = null;
 let destinationMarker = null;
 let currentRideId;
-let rideSharingContract;
 let pickupCoords = null;
 let destinationCoords = null;
+let pickupAddress = null; // Store the actual pickup address
+let destinationAddress = null; // Store the actual destination address
 
 // California cities database
 const caCities = {
@@ -49,23 +49,40 @@ const contractABI = [
         "inputs": [
             {
                 "internalType": "string",
-                "name": "pickup",
+                "name": "origin",
                 "type": "string"
             },
             {
                 "internalType": "string",
                 "name": "destination",
                 "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "cost",
+                "type": "uint256"
             }
         ],
         "name": "requestRide",
-        "outputs": [],
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
         "stateMutability": "nonpayable",
         "type": "function"
     },
     {
         "anonymous": false,
         "inputs": [
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "rideId",
+                "type": "uint256"
+            },
             {
                 "indexed": true,
                 "internalType": "address",
@@ -75,7 +92,7 @@ const contractABI = [
             {
                 "indexed": false,
                 "internalType": "string",
-                "name": "pickup",
+                "name": "origin",
                 "type": "string"
             },
             {
@@ -83,6 +100,12 @@ const contractABI = [
                 "internalType": "string",
                 "name": "destination",
                 "type": "string"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "cost",
+                "type": "uint256"
             }
         ],
         "name": "RideRequested",
@@ -93,36 +116,83 @@ const contractABI = [
         "name": "getActiveRideRequests",
         "outputs": [
             {
-                "components": [
-                    {
-                        "internalType": "uint256[]",
-                        "name": "rideIds",
-                        "type": "uint256[]"
-                    },
-                    {
-                        "internalType": "address[]",
-                        "name": "riders",
-                        "type": "address[]"
-                    },
-                    {
-                        "internalType": "string[]",
-                        "name": "pickups",
-                        "type": "string[]"
-                    },
-                    {
-                        "internalType": "string[]",
-                        "name": "destinations",
-                        "type": "string[]"
-                    },
-                    {
-                        "internalType": "uint256[]",
-                        "name": "fares",
-                        "type": "uint256[]"
-                    }
-                ],
-                "internalType": "struct DriverManager.ActiveRides",
+                "internalType": "uint256[]",
+                "name": "rideIds",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "address[]",
+                "name": "riders",
+                "type": "address[]"
+            },
+            {
+                "internalType": "string[]",
+                "name": "pickups",
+                "type": "string[]"
+            },
+            {
+                "internalType": "string[]",
+                "name": "destinations",
+                "type": "string[]"
+            },
+            {
+                "internalType": "uint256[]",
+                "name": "fares",
+                "type": "uint256[]"
+            },
+            {
+                "internalType": "int256[]",
+                "name": "pickupLats",
+                "type": "int256[]"
+            },
+            {
+                "internalType": "int256[]",
+                "name": "pickupLngs",
+                "type": "int256[]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "rideId",
+                "type": "uint256"
+            }
+        ],
+        "name": "getRideDetails",
+        "outputs": [
+            {
+                "internalType": "address",
                 "name": "",
-                "type": "tuple"
+                "type": "address"
+            },
+            {
+                "internalType": "address",
+                "name": "",
+                "type": "address"
+            },
+            {
+                "internalType": "string",
+                "name": "",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            },
+            {
+                "internalType": "enum RideManager.RideStatus",
+                "name": "",
+                "type": "uint8"
             }
         ],
         "stateMutability": "view",
@@ -131,17 +201,37 @@ const contractABI = [
 ];
 
 async function init() {
+    console.log('Starting contract initialization...');
     // Check if MetaMask is installed
     if (typeof window.ethereum !== 'undefined') {
         try {
             // Request account access
             await window.ethereum.request({ method: 'eth_requestAccounts' });
             web3 = new Web3(window.ethereum);
+            console.log('Web3 initialized successfully');
             
-            rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
+            // Get network ID to find the correct contract address
+            const networkId = await web3.eth.net.getId();
+            console.log('Connected to network ID:', networkId);
             
-            // For testing, we'll just show a message
-            document.getElementById('currentMessage').textContent = "This is a demo. To use a real contract, deploy it to a test network and update the contract address.";
+            // Add account selector if available
+            if (window.addAccountSelector) {
+                await window.addAccountSelector('Rider Account:', '.account-container', true);
+            }
+            
+            // DIRECT CONTRACT INITIALIZATION - use the hardcoded address if fetch fails
+            try {
+                // ... existing code ...
+            } catch (error) {
+                // ... existing code ...
+            }
+            
+            // Listen for account changes
+            window.ethereum.on('accountsChanged', async (accounts) => {
+                console.log('Account changed to:', accounts[0]);
+                updateConnectionStatus(true, accounts[0]);
+            });
+            
         } catch (error) {
             console.error('Error initializing:', error);
         }
@@ -254,6 +344,8 @@ function handleMapClick(e) {
     const lat = e.latlng.lat;
     const lng = e.latlng.lng;
     
+    console.log('Map clicked at coordinates:', { lat, lng });
+    
     // Get the address for the clicked location
     const geocoder = L.Control.Geocoder.nominatim();
     geocoder.reverse(e.latlng, map.options.crs.scale(map.getZoom()), function(results) {
@@ -261,12 +353,39 @@ function handleMapClick(e) {
         
         if (!pickupCoords) {
             // Set pickup location
+            console.log('Setting pickup coordinates:', { lat, lng });
+            
+            // Update pickup input field
+            document.getElementById("pickup").value = address;
+            
+            // Set pickupAddress directly
+            pickupAddress = address;
+            
             setPickupLocation(lat, lng, address);
             showToast('Pickup location set to: ' + address);
+            
+            console.log('After setting pickup:');
+            console.log('- Input field:', document.getElementById("pickup").value);
+            console.log('- pickupAddress:', pickupAddress);
+            console.log('- pickupCoords:', pickupCoords);
         } else if (!destinationCoords) {
             // Set destination location
+            console.log('Setting destination coordinates:', { lat, lng });
+            
+            // Update destination input field
+            document.getElementById("destination").value = address;
+            
+            // Set destinationAddress directly
+            destinationAddress = address;
+            
             setDestinationLocation(lat, lng, address);
             showToast('Destination location set to: ' + address);
+            
+            console.log('After setting destination:');
+            console.log('- Input field:', document.getElementById("destination").value);
+            console.log('- destinationAddress:', destinationAddress);
+            console.log('- destinationCoords:', destinationCoords);
+            
             // Calculate route automatically when both locations are set
             calculateRoute();
         }
@@ -368,18 +487,33 @@ function setupEventListeners() {
     if (requestRideBtn) {
         requestRideBtn.addEventListener("click", function() {
             console.log('Request ride button clicked');
-            if (!pickupCoords || !destinationCoords) {
+            if (!document.getElementById("pickup").value || !document.getElementById("destination").value) {
                 showToast('Please set both locations first', 'error');
-                return;
-            }
-            if (!routingControl) {
-                showToast('Please calculate the route first', 'error');
                 return;
             }
             requestRide();
         });
         console.log('Request ride button listener added');
     }
+    
+    // Debug button for direct contract testing
+    const debugBtn = document.createElement('button');
+    debugBtn.textContent = 'Debug Test';
+    debugBtn.style.position = 'fixed';
+    debugBtn.style.bottom = '10px';
+    debugBtn.style.right = '10px';
+    debugBtn.style.zIndex = 1000;
+    debugBtn.style.padding = '5px 10px';
+    debugBtn.style.backgroundColor = '#ff5722';
+    debugBtn.style.color = 'white';
+    debugBtn.style.border = 'none';
+    debugBtn.style.borderRadius = '4px';
+    debugBtn.addEventListener('click', function() {
+        console.log('Debug button clicked - running direct test');
+        testContractDirectly();
+    });
+    document.body.appendChild(debugBtn);
+    console.log('Debug button added');
 
     console.log('All event listeners set up successfully');
 }
@@ -451,11 +585,15 @@ function getCurrentLocation() {
 
 // Function to set pickup location
 function setPickupLocation(lat, lng, address) {
-    // Update the input field with the address
-    document.getElementById("pickup").value = address;
+    // IMPORTANT: Update the input field with the address
+    const pickupInput = document.getElementById("pickup");
+    if (pickupInput) {
+        pickupInput.value = address;
+        console.log('Updated pickup input field with:', address);
+    }
     
     // Store the coordinates
-    pickupCoords = [lat, lng];
+    pickupCoords = { lat, lng };
     
     // Remove existing pickup marker if it exists
     if (pickupMarker) {
@@ -488,11 +626,15 @@ function setPickupLocation(lat, lng, address) {
 
 // Function to set destination location
 function setDestinationLocation(lat, lng, address) {
-    // Update the input field with the address
-    document.getElementById("destination").value = address;
+    // IMPORTANT: Update the input field with the address
+    const destinationInput = document.getElementById("destination");
+    if (destinationInput) {
+        destinationInput.value = address;
+        console.log('Updated destination input field with:', address);
+    }
     
     // Store the coordinates
-    destinationCoords = [lat, lng];
+    destinationCoords = { lat, lng };
     
     // Remove existing destination marker if it exists
     if (destinationMarker) {
@@ -538,8 +680,8 @@ function calculateRoute() {
     // Create new routing control
     routingControl = L.Routing.control({
         waypoints: [
-            L.latLng(pickupCoords[0], pickupCoords[1]),
-            L.latLng(destinationCoords[0], destinationCoords[1])
+            L.latLng(pickupCoords.lat, pickupCoords.lng),
+            L.latLng(destinationCoords.lat, destinationCoords.lng)
         ],
         routeWhileDragging: true,
         lineOptions: {
@@ -757,14 +899,101 @@ function updateConnectionStatus(isConnected, account = null) {
     }
 }
 
+// Function to verify contract is loaded
+async function verifyContractLoaded() {
+    // If contract is not loaded, try to load it directly
+    if (!rideSharingContract) {
+        console.log('Contract not loaded yet, attempting direct initialization...');
+        
+        try {
+            // Create contract instance using hardcoded address
+            rideSharingContract = new web3.eth.Contract(
+                contractABI,
+                contractAddress
+            );
+            console.log('Contract initialized directly with address:', contractAddress);
+            
+            // Verify contract is valid by calling a simple method
+            try {
+                const rideCount = await rideSharingContract.methods.rideCount().call();
+                console.log('Contract verification successful - ride count:', rideCount);
+                return true;
+            } catch (error) {
+                console.error('Contract verification failed:', error);
+                return false;
+            }
+        } catch (error) {
+            console.error('Failed to initialize contract directly:', error);
+            return false;
+        }
+    } else {
+        console.log('Contract already initialized');
+        return true;
+    }
+}
+
+// Adding a debug function to help diagnose contract issues
+async function testContractDirectly() {
+    try {
+        const accounts = await web3.eth.getAccounts();
+        if (!accounts || accounts.length === 0) {
+            console.error('No accounts available');
+            return;
+        }
+        
+        // Create contract instance directly
+        const testContract = new web3.eth.Contract(contractABI, contractAddress);
+        
+        // Hardcoded values for testing
+        const origin = "Test Origin";
+        const destination = "Test Destination";
+        const cost = web3.utils.toWei('0.01', 'ether');
+        
+        console.log('DIRECT TEST: Sending hardcoded values to contract:');
+        console.log('Origin:', origin);
+        console.log('Destination:', destination);
+        console.log('Cost:', cost);
+        console.log('From:', accounts[0]);
+        
+        const result = await testContract.methods.requestRide(origin, destination, cost)
+            .send({ from: accounts[0], gas: 500000 });
+            
+        console.log('DIRECT TEST RESULT:', result);
+        return true;
+    } catch (error) {
+        console.error('DIRECT TEST FAILED:', error);
+        return false;
+    }
+}
+
 // Request a ride
 async function requestRide() {
     try {
-        // Check if pickup and destination are set
-        if (!pickupCoords || !destinationCoords) {
+        console.log('======= RIDE REQUEST INITIATED =======');
+        
+        // DIRECT APPROACH: Get values directly from input elements
+        const pickupInputEl = document.getElementById("pickup");
+        const destinationInputEl = document.getElementById("destination");
+        
+        if (!pickupInputEl || !destinationInputEl) {
+            console.error('Missing input elements!');
+            showToast('Error: Input elements not found', 'error');
+            return;
+        }
+        
+        // Get the values from the input fields - this is the exact approach that worked in our test
+        const pickup = pickupInputEl.value.trim();
+        const destination = destinationInputEl.value.trim();
+        
+        // Check if we have valid inputs
+        if (!pickup || !destination) {
             showToast('Please set both pickup and destination locations', 'error');
             return;
         }
+        
+        console.log('RIDE DETAILS:');
+        console.log('Pickup:', pickup);
+        console.log('Destination:', destination);
 
         // Check if account is connected
         const accounts = await web3.eth.getAccounts();
@@ -772,29 +1001,37 @@ async function requestRide() {
             showToast('Please connect your wallet first', 'error');
             return;
         }
+        console.log('From account:', accounts[0]);
+
+        // Check if contract is initialized
+        if (!rideSharingContract) {
+            // Direct initialization - same as in the test page
+            console.log('Initializing contract directly');
+            rideSharingContract = new web3.eth.Contract(contractABI, contractAddress);
+        }
 
         // Generate a random ride ID (8 characters)
         const randomRideId = Math.random().toString(36).substring(2, 10).toUpperCase();
 
-        // Convert coordinates to strings
-        const pickup = `${pickupCoords.lat},${pickupCoords.lng}`;
-        const destination = `${destinationCoords.lat},${destinationCoords.lng}`;
+        // Calculate ride cost (this can be based on distance or fixed amount)
+        const cost = web3.utils.toWei('0.01', 'ether'); // 0.01 ETH for testing
+        console.log('Cost:', cost, 'wei');
 
-        console.log('Requesting ride with parameters:');
-        console.log('Ride ID:', randomRideId);
-        console.log('Pickup:', pickup);
-        console.log('Destination:', destination);
-        console.log('From account:', accounts[0]);
-
-        // Send transaction to contract
-        const result = await rideSharingContract.methods.requestRide(pickup, destination)
-            .send({ from: accounts[0] });
+        console.log('Sending transaction to contract...');
+        const result = await rideSharingContract.methods.requestRide(
+            pickup,          // Use the input value directly
+            destination,     // Use the input value directly
+            cost
+        ).send({ 
+            from: accounts[0],
+            gas: 500000      // Explicit gas limit
+        });
 
         console.log('Transaction result:', result);
 
         // Check if transaction was successful
         if (result.status) {
-            console.log('Ride requested successfully. Ride ID:', randomRideId);
+            console.log('SUCCESS! Ride requested. Ride ID:', randomRideId);
             showToast(`Ride requested successfully! Your Ride ID is: ${randomRideId}`, 'success');
             
             // Update UI
@@ -836,11 +1073,35 @@ function searchLocation(searchQuery, type) {
                 });
 
                 if (type === 'pickup') {
-                    setPickupLocation(lat, lng, displayName);
+                    console.log('Setting pickup location from search:', { lat, lng, displayName });
+                    
+                    // Directly set pickup address
+                    pickupAddress = displayName;
+                    
+                    // Update input field
                     document.getElementById('pickup').value = displayName;
+                    
+                    setPickupLocation(lat, lng, displayName);
+                    
+                    console.log('After setting pickup from search:');
+                    console.log('- Input field:', document.getElementById('pickup').value);
+                    console.log('- pickupAddress:', pickupAddress);
+                    console.log('- pickupCoords:', pickupCoords);
                 } else {
-                    setDestinationLocation(lat, lng, displayName);
+                    console.log('Setting destination location from search:', { lat, lng, displayName });
+                    
+                    // Directly set destination address
+                    destinationAddress = displayName;
+                    
+                    // Update input field
                     document.getElementById('destination').value = displayName;
+                    
+                    setDestinationLocation(lat, lng, displayName);
+                    
+                    console.log('After setting destination from search:');
+                    console.log('- Input field:', document.getElementById('destination').value);
+                    console.log('- destinationAddress:', destinationAddress);
+                    console.log('- destinationCoords:', destinationCoords);
                 }
 
                 // Center map on the found location
@@ -848,6 +1109,10 @@ function searchLocation(searchQuery, type) {
                 
                 // If both locations are set, calculate the route
                 if (pickupCoords && destinationCoords) {
+                    console.log('Both locations set, calculating route with:', {
+                        pickup: pickupCoords,
+                        destination: destinationCoords
+                    });
                     calculateRoute();
                 }
             } else {
@@ -948,5 +1213,139 @@ function enableMapClickLocation() {
 // Add event listener for the switch button
 document.getElementById("switch-to-driver").addEventListener("click", function() {
     window.location.href = "driver.html";
-}); 
+});
+
+// Add account selector to the UI
+async function addAccountSelector() {
+    try {
+        // Get all accounts
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        
+        // Find or create the account selector container
+        let selectorContainer = document.getElementById('account-selector-container');
+        if (!selectorContainer) {
+            // Create the container if it doesn't exist
+            selectorContainer = document.createElement('div');
+            selectorContainer.id = 'account-selector-container';
+            selectorContainer.className = 'account-selector';
+            
+            // Insert after connection status
+            const connectionStatus = document.getElementById('connection-status');
+            if (connectionStatus && connectionStatus.parentNode) {
+                connectionStatus.parentNode.insertBefore(selectorContainer, connectionStatus.nextSibling);
+            } else {
+                // Fallback - add to the top of the ride details section
+                const rideDetails = document.querySelector('.ride-details');
+                if (rideDetails) {
+                    rideDetails.prepend(selectorContainer);
+                }
+            }
+        }
+        
+        // Clear existing content
+        selectorContainer.innerHTML = '';
+        
+        // Add a label
+        const label = document.createElement('div');
+        label.textContent = 'Rider Account:';
+        label.className = 'account-label';
+        selectorContainer.appendChild(label);
+        
+        // Create the selector
+        const selector = document.createElement('select');
+        selector.id = 'account-selector';
+        selector.className = 'account-dropdown';
+        
+        // Add options for each account
+        accounts.forEach((account, index) => {
+            const option = document.createElement('option');
+            option.value = account;
+            option.textContent = `${account.substring(0, 8)}...${account.substring(account.length - 6)}`;
+            
+            // Select the current account
+            if (account === window.ethereum.selectedAddress) {
+                option.selected = true;
+            }
+            
+            selector.appendChild(option);
+        });
+        
+        // Add change event
+        selector.addEventListener('change', async function() {
+            const selectedAccount = this.value;
+            console.log('Switching to account:', selectedAccount);
+            
+            try {
+                // Request account switch
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: await window.ethereum.request({ method: 'eth_chainId' }) }],
+                });
+                
+                await window.ethereum.request({
+                    method: 'eth_requestAccounts',
+                    params: [{ eth_accounts: [selectedAccount] }],
+                });
+                
+                // Force refresh after short delay to ensure account change takes effect
+                setTimeout(() => {
+                    location.reload();
+                }, 500);
+            } catch (error) {
+                console.error('Error switching account:', error);
+                alert('Could not switch account. Please try manually switching in MetaMask.');
+            }
+        });
+        
+        selectorContainer.appendChild(selector);
+        
+        // Add some CSS for the account selector
+        const style = document.createElement('style');
+        style.textContent = `
+            .account-selector {
+                margin: 10px 0;
+                padding: 8px;
+                background-color: #f5f5f5;
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+            }
+            .account-label {
+                margin-right: 10px;
+                font-weight: bold;
+            }
+            .account-dropdown {
+                padding: 5px;
+                border-radius: 4px;
+                border: 1px solid #ddd;
+                background-color: white;
+                flex-grow: 1;
+            }
+        `;
+        document.head.appendChild(style);
+        
+    } catch (error) {
+        console.error('Error setting up account selector:', error);
+    }
+}
+
+// Check for active ride
+async function checkActiveRide() {
+    try {
+        // Get active ride requests
+        const activeRideRequests = await rideSharingContract.methods.getActiveRideRequests().call();
+        
+        // Check if there are active ride requests
+        if (activeRideRequests.length > 0) {
+            console.log('Active ride requests found:', activeRideRequests);
+            showToast('Active ride requests found. Please check your ride history.', 'info');
+        } else {
+            console.log('No active ride requests found');
+            showToast('No active ride requests found. You can request a new ride.', 'info');
+        }
+    } catch (error) {
+        console.error('Error checking active ride:', error);
+        showToast('Error checking active ride. Please try again later.', 'error');
+    }
+}
 
