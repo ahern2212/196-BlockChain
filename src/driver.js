@@ -1076,7 +1076,209 @@ function stopLocationTracking() {
     }
 }
 
-// Accept a ride request
+// Function to navigate to rider's pickup location
+function navigateToPickup() {
+    if (!currentRideId) {
+        showToast('No active ride to navigate to', 'error');
+        return;
+    }
+    
+    const pickupLocation = document.getElementById("pickup-location").textContent;
+    
+    // Check if we have a valid pickup location
+    if (!pickupLocation) {
+        showToast('Pickup location not available', 'error');
+        return;
+    }
+    
+    // First try to parse coordinates if available
+    let lat, lng;
+    const coordsMatch = pickupLocation.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+    
+    if (coordsMatch) {
+        lat = parseFloat(coordsMatch[1]);
+        lng = parseFloat(coordsMatch[2]);
+        
+        if (!isNaN(lat) && !isNaN(lng)) {
+            // We have coordinates, calculate route
+            showToast('Calculating route to pickup location...', 'info');
+            
+            // Get driver's current position
+            if (driverMarker) {
+                const driverPos = driverMarker.getLatLng();
+                
+                // Create routing control for directions
+                if (window.routingControl) {
+                    map.removeControl(window.routingControl);
+                }
+                
+                window.routingControl = L.Routing.control({
+                    waypoints: [
+                        L.latLng(driverPos.lat, driverPos.lng),
+                        L.latLng(lat, lng)
+                    ],
+                    routeWhileDragging: false,
+                    lineOptions: {
+                        styles: [{ color: '#6FA1EC', weight: 4 }]
+                    },
+                    show: true,
+                    showAlternatives: true,
+                    addWaypoints: false
+                }).addTo(driverMap);
+                
+                // Fit map to show the route
+                driverMap.fitBounds([
+                    [driverPos.lat, driverPos.lng],
+                    [lat, lng]
+                ], { padding: [50, 50] });
+                
+                // If supported, open in maps app
+                const openInMapsBtn = document.createElement('button');
+                openInMapsBtn.textContent = 'Open in Maps App';
+                openInMapsBtn.className = 'map-button';
+                openInMapsBtn.onclick = function() {
+                    // Try to open in maps app
+                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                    let mapsUrl;
+                    
+                    if (isMobile) {
+                        // Mobile devices
+                        if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                            // iOS
+                            mapsUrl = `maps://?daddr=${lat},${lng}`;
+                        } else {
+                            // Android
+                            mapsUrl = `geo:0,0?q=${lat},${lng}(Pickup Location)`;
+                        }
+                    } else {
+                        // Desktop - open Google Maps
+                        mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+                    }
+                    
+                    window.open(mapsUrl, '_blank');
+                };
+                
+                // Add button to the map
+                const mapButtonContainer = document.createElement('div');
+                mapButtonContainer.style.position = 'absolute';
+                mapButtonContainer.style.bottom = '10px';
+                mapButtonContainer.style.left = '10px';
+                mapButtonContainer.style.zIndex = '1000';
+                mapButtonContainer.appendChild(openInMapsBtn);
+                
+                // Remove any existing button first
+                const existingBtn = document.querySelector('.map-button-container');
+                if (existingBtn) {
+                    existingBtn.remove();
+                }
+                
+                mapButtonContainer.className = 'map-button-container';
+                document.querySelector('#driver-map').appendChild(mapButtonContainer);
+                
+                return true;
+            } else {
+                showToast('Driver location not available', 'error');
+                return false;
+            }
+        }
+    }
+    
+    // If no coordinates, try to geocode the address
+    showToast('Geocoding pickup address...', 'info');
+    
+    // Use OpenStreetMap Nominatim API for geocoding
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(pickupLocation)}&limit=1`;
+    
+    fetch(geocodeUrl)
+        .then(response => response.json())
+        .then(data => {
+            if (data && data.length > 0) {
+                const location = data[0];
+                navigateToCoordinates(parseFloat(location.lat), parseFloat(location.lon));
+            } else {
+                showToast('Could not find location coordinates', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error geocoding address:', error);
+            showToast('Error finding location', 'error');
+        });
+}
+
+// Helper function to navigate to coordinates
+function navigateToCoordinates(lat, lng) {
+    if (!driverMarker) {
+        showToast('Driver location not available', 'error');
+        return;
+    }
+    
+    const driverPos = driverMarker.getLatLng();
+    
+    // Create routing control for directions
+    if (window.routingControl) {
+        driverMap.removeControl(window.routingControl);
+    }
+    
+    window.routingControl = L.Routing.control({
+        waypoints: [
+            L.latLng(driverPos.lat, driverPos.lng),
+            L.latLng(lat, lng)
+        ],
+        routeWhileDragging: false,
+        lineOptions: {
+            styles: [{ color: '#6FA1EC', weight: 4 }]
+        },
+        show: true,
+        showAlternatives: true,
+        addWaypoints: false
+    }).addTo(driverMap);
+    
+    // Fit map to show the route
+    driverMap.fitBounds([
+        [driverPos.lat, driverPos.lng],
+        [lat, lng]
+    ], { padding: [50, 50] });
+    
+    showToast('Route calculated successfully', 'success');
+}
+
+// Function to display a toast message
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <i class="fas ${type === 'error' ? 'fa-exclamation-circle' : 
+                       type === 'info' ? 'fa-info-circle' : 
+                       'fa-check-circle'}"></i>
+        ${message}
+    `;
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => toast.classList.add('show'), 100);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Function to update ride status and progress bar
+function updateRideStatus(status, progressPercent) {
+    const statusText = document.getElementById("ride-status-text");
+    const progressBar = document.getElementById("ride-progress");
+    
+    if (statusText) {
+        statusText.textContent = status;
+    }
+    
+    if (progressBar) {
+        progressBar.style.width = `${progressPercent}%`;
+    }
+}
+
+// Update acceptRide function to initialize ride status
 async function acceptRide(rideId) {
     try {
         const accounts = await web3.eth.getAccounts();
@@ -1106,6 +1308,25 @@ async function acceptRide(rideId) {
             document.getElementById("rider-address").textContent = riderAddress;
             document.getElementById("ride-fare").textContent = rideFare;
             
+            // Initialize ride status
+            updateRideStatus("Heading to pickup", 10);
+            
+            // Add navigation button
+            const actionButtons = document.querySelector('#active-ride .ride-actions');
+            if (actionButtons) {
+                // Check if button already exists
+                if (!document.getElementById('navigate-button')) {
+                    const navigateButton = document.createElement('button');
+                    navigateButton.id = 'navigate-button';
+                    navigateButton.className = 'action-button';
+                    navigateButton.innerHTML = '<i class="fas fa-directions"></i> Navigate';
+                    navigateButton.onclick = navigateToPickup;
+                    
+                    // Insert before the first button
+                    actionButtons.insertBefore(navigateButton, actionButtons.firstChild);
+                }
+            }
+            
             // Show active ride panel
             document.getElementById("active-ride").style.display = "block";
             
@@ -1134,19 +1355,8 @@ async function acceptRide(rideId) {
                         // Center map on pickup location
                         driverMap.setView([pickupLat, pickupLng], 15);
                         
-                        // Draw route from driver to pickup if driver location is available
-                        if (driverMarker) {
-                            const driverPos = driverMarker.getLatLng();
-                            
-                            // If using a routing library like Leaflet Routing Machine, you could do:
-                            // const routingControl = L.Routing.control({
-                            //     waypoints: [
-                            //         L.latLng(driverPos.lat, driverPos.lng),
-                            //         L.latLng(pickupLat, pickupLng)
-                            //     ],
-                            //     createMarker: function() { return null; } // Don't create markers
-                            // }).addTo(driverMap);
-                        }
+                        // Automatically calculate route to pickup
+                        navigateToCoordinates(pickupLat, pickupLng);
                     }
                 }
             } catch (error) {
@@ -1436,17 +1646,296 @@ function showRideRequest(rideId, rider, pickup, destination, fare) {
     }
 }
 
-// Ride action functions
+// Update arrivedAtPickup function to update status
 async function arrivedAtPickup() {
-    // Implementation of arrivedAtPickup function
+    if (!currentRideId) {
+        showToast('No active ride', 'error');
+        return;
+    }
+    
+    try {
+        // Update UI to show driver has arrived
+        document.getElementById("status-message").textContent = "You have arrived at the pickup location";
+        
+        // Enable the Start Ride button
+        document.getElementById("start-ride-button").disabled = false;
+        
+        // Highlight the button to indicate next action
+        document.getElementById("start-ride-button").classList.add("highlight");
+        
+        // Notify rider that driver has arrived (in a real app, this would be a push notification)
+        showToast('Rider has been notified of your arrival', 'success');
+        
+        // Play notification sound if available
+        try {
+            const audio = new Audio('notification.mp3');
+            audio.play().catch(e => console.log("Audio play failed:", e));
+        } catch (e) {
+            console.log("Could not play notification sound:", e);
+        }
+        
+        // Update ride status
+        updateRideStatus("At pickup location", 33);
+    } catch (error) {
+        console.error("Error in arrivedAtPickup:", error);
+        showToast('Error processing arrival', 'error');
+    }
 }
 
+// Update startRide function to update status
 async function startRide() {
-    // Implementation of startRide function
+    if (!currentRideId) {
+        showToast('No active ride', 'error');
+        return;
+    }
+    
+    try {
+        const accounts = await web3.eth.getAccounts();
+        const account = accounts[0];
+        
+        // Update UI
+        document.getElementById("status-message").textContent = "Starting ride...";
+        
+        // Call the contract to start the ride
+        await rideSharingContract.methods.startRide(currentRideId)
+            .send({ from: account, gas: 200000 });
+        
+        // Update UI after confirmation
+        document.getElementById("status-message").textContent = "Ride in progress";
+        
+        // Disable the Start Ride button
+        document.getElementById("start-ride-button").disabled = true;
+        document.getElementById("start-ride-button").classList.remove("highlight");
+        
+        // Enable the Complete Ride button
+        document.getElementById("complete-ride-button").disabled = false;
+        document.getElementById("complete-ride-button").classList.add("highlight");
+        
+        // Calculate and show the route from pickup to destination
+        calculateRouteToDestination();
+        
+        showToast('Ride started successfully', 'success');
+        
+        // Update ride status
+        updateRideStatus("Ride in progress", 66);
+    } catch (error) {
+        console.error("Error starting ride:", error);
+        showToast('Error starting ride: ' + error.message, 'error');
+    }
 }
 
+// Calculate route from pickup to destination
+function calculateRouteToDestination() {
+    try {
+        const pickupLocation = document.getElementById("pickup-location").textContent;
+        const destinationLocation = document.getElementById("destination-location").textContent;
+        
+        if (!pickupLocation || !destinationLocation) {
+            showToast('Missing location information', 'error');
+            return;
+        }
+        
+        // First try to handle if we have coordinate formats
+        const pickupCoords = extractCoordinates(pickupLocation);
+        const destinationCoords = extractCoordinates(destinationLocation);
+        
+        if (pickupCoords && destinationCoords) {
+            // We have coordinates for both locations
+            showRouteOnMap(pickupCoords.lat, pickupCoords.lng, destinationCoords.lat, destinationCoords.lng);
+            return;
+        }
+        
+        // If we don't have coordinates, try geocoding
+        showToast('Calculating route to destination...', 'info');
+        
+        // Geocode the destination
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationLocation)}&limit=1`;
+        
+        fetch(geocodeUrl)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    const location = data[0];
+                    const destLat = parseFloat(location.lat);
+                    const destLng = parseFloat(location.lon);
+                    
+                    // If we need to geocode the pickup as well
+                    if (!pickupCoords) {
+                        const pickupGeoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(pickupLocation)}&limit=1`;
+                        
+                        fetch(pickupGeoUrl)
+                            .then(response => response.json())
+                            .then(pickupData => {
+                                if (pickupData && pickupData.length > 0) {
+                                    const pickupLoc = pickupData[0];
+                                    const pickupLat = parseFloat(pickupLoc.lat);
+                                    const pickupLng = parseFloat(pickupLoc.lon);
+                                    
+                                    showRouteOnMap(pickupLat, pickupLng, destLat, destLng);
+                                } else {
+                                    showToast('Could not geocode pickup location', 'error');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error geocoding pickup:', error);
+                                showToast('Error finding pickup location', 'error');
+                            });
+                    } else {
+                        // We already have pickup coordinates
+                        showRouteOnMap(pickupCoords.lat, pickupCoords.lng, destLat, destLng);
+                    }
+                } else {
+                    showToast('Could not find destination coordinates', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error geocoding destination:', error);
+                showToast('Error finding destination', 'error');
+            });
+    } catch (error) {
+        console.error('Error calculating route:', error);
+        showToast('Error calculating route', 'error');
+    }
+}
+
+// Helper function to extract coordinates from a string
+function extractCoordinates(locationString) {
+    const coordsMatch = locationString.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+    
+    if (coordsMatch) {
+        const lat = parseFloat(coordsMatch[1]);
+        const lng = parseFloat(coordsMatch[2]);
+        
+        if (!isNaN(lat) && !isNaN(lng)) {
+            return { lat, lng };
+        }
+    }
+    
+    return null;
+}
+
+// Show route on map between two coordinates
+function showRouteOnMap(startLat, startLng, endLat, endLng) {
+    // Clear previous route
+    if (window.routingControl) {
+        driverMap.removeControl(window.routingControl);
+    }
+    
+    // Create routing control for directions
+    window.routingControl = L.Routing.control({
+        waypoints: [
+            L.latLng(startLat, startLng),
+            L.latLng(endLat, endLng)
+        ],
+        routeWhileDragging: false,
+        lineOptions: {
+            styles: [{ color: '#FF4500', weight: 6 }] // Distinctive color for the destination route
+        },
+        show: true,
+        showAlternatives: true,
+        addWaypoints: false,
+        router: L.Routing.osrmv1({
+            serviceUrl: 'https://router.project-osrm.org/route/v1',
+            profile: 'driving'
+        }),
+        createMarker: function(i, waypoint, n) {
+            const marker = L.marker(waypoint.latLng, {
+                draggable: false,
+                icon: L.divIcon({
+                    className: i === 0 ? 'pickup-marker' : 'destination-marker',
+                    html: i === 0 ? '<i class="fas fa-map-marker-alt"></i>' : '<i class="fas fa-flag-checkered"></i>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 30]
+                })
+            });
+            return marker;
+        }
+    }).addTo(driverMap);
+    
+    // Fit map to show the route
+    driverMap.fitBounds([
+        [startLat, startLng],
+        [endLat, endLng]
+    ], { padding: [50, 50] });
+    
+    showToast('Route to destination calculated', 'success');
+}
+
+// Update completeRide function to update status
 async function completeRide() {
-    // Implementation of completeRide function
+    if (!currentRideId) {
+        showToast('No active ride', 'error');
+        return;
+    }
+    
+    try {
+        const accounts = await web3.eth.getAccounts();
+        const account = accounts[0];
+        
+        // Update UI
+        document.getElementById("status-message").textContent = "Completing ride...";
+        
+        // Call the contract to complete the ride
+        await rideSharingContract.methods.completeRide(currentRideId)
+            .send({ from: account, gas: 300000 });
+        
+        // Update UI after confirmation
+        document.getElementById("status-message").textContent = "Ride completed successfully";
+        
+        // Clear the active ride display
+        setTimeout(() => {
+            document.getElementById("active-ride").style.display = "none";
+            document.getElementById("status-message").textContent = "Ready for next ride";
+            
+            // Reset current ride ID
+            currentRideId = null;
+            
+            // Update availability toggle if needed
+            document.getElementById("availability-toggle").checked = true;
+            
+            // Clear the route from the map
+            if (window.routingControl) {
+                driverMap.removeControl(window.routingControl);
+            }
+            
+            // Remove any markers except driver's location
+            driverMap.eachLayer(function(layer) {
+                if (layer instanceof L.Marker && layer !== driverMarker) {
+                    driverMap.removeLayer(layer);
+                }
+            });
+            
+            // Check for new ride requests
+            checkActiveRides();
+        }, 3000);
+        
+        // Show earnings notification
+        try {
+            // Get ride details to show earnings
+            const rideDetails = await rideSharingContract.methods.getRideDetails(currentRideId).call();
+            const fareInEth = web3.utils.fromWei(rideDetails.fare.toString(), 'ether');
+            
+            // Calculate platform fee (5%)
+            const platformFee = parseFloat(fareInEth) * 0.05;
+            const driverEarnings = parseFloat(fareInEth) - platformFee;
+            
+            showToast(`Ride completed! You earned ${driverEarnings.toFixed(5)} ETH`, 'success');
+            
+            // Update total earnings display
+            const driverDetails = await rideSharingContract.methods.getDriverDetails(account).call();
+            const totalEarnings = web3.utils.fromWei(driverDetails.totalEarnings.toString(), 'ether');
+            document.getElementById("total-earnings").textContent = `${totalEarnings} ETH`;
+        } catch (detailsError) {
+            console.error("Error getting ride details:", detailsError);
+            showToast('Ride completed! Payment processed.', 'success');
+        }
+        
+        // Update ride status
+        updateRideStatus("Ride completed", 100);
+    } catch (error) {
+        console.error("Error completing ride:", error);
+        showToast('Error completing ride: ' + error.message, 'error');
+    }
 }
 
 // Make sure this is called when the page loads

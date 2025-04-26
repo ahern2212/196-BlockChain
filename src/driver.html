@@ -7,6 +7,117 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <style>
+        /* Add this to your existing styles */
+        .map-button {
+            padding: 8px 12px;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: background-color 0.2s;
+        }
+        
+        .map-button:hover {
+            background-color: #3367D6;
+        }
+        
+        .action-button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.2s;
+        }
+        
+        .action-button:hover {
+            background-color: #3367D6;
+        }
+        
+        #navigate-button {
+            background-color: #34A853;
+        }
+        
+        #navigate-button:hover {
+            background-color: #2E8B57;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .toast.error {
+            background-color: #F44336;
+        }
+        
+        .toast.info {
+            background-color: #2196F3;
+        }
+        
+        /* Add highlight styling for buttons */
+        .highlight {
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 10px #34A853;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(52, 168, 83, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(52, 168, 83, 0);
+            }
+        }
+        
+        /* Ride status styles */
+        .ride-progress-bar {
+            height: 5px;
+            margin: 15px 0;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .ride-progress-inner {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -54,6 +165,12 @@
                         <p>Destination: <span id="destination-location">N/A</span></p>
                         <p>Rider: <span id="rider-address">N/A</span></p>
                         <p>Fare: <span id="ride-fare">0 ETH</span></p>
+                        <div class="ride-status">
+                            <p>Status: <span id="ride-status-text">Awaiting Pickup</span></p>
+                            <div class="ride-progress-bar">
+                                <div id="ride-progress" class="ride-progress-inner"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="ride-actions">
                         <button id="arrived-button">Arrived at Pickup</button>
@@ -103,5 +220,6 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="driver.js"></script>
     <script src="account-selector.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 </body>
 </html>
